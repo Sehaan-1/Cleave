@@ -56,11 +56,11 @@ end
 
 `scan` visits `.rb` files in sorted path order, skipping symlinks, `.git` and `node_modules`. Parse or I/O errors abort rather than returning an incomplete result. `analyze(source, path:, spec: nil)` handles a single file; by default only `spec/**/*_spec.rb` files are classified as specs, and callers can override `spec:` explicitly. Fact locations are one-based lines, zero-based **byte** columns, and byte lengths. Definitions and constant references are syntactic facts with lexical nesting, not resolved Ruby constants. Literal `require_relative` edges expose the path normalized relative to the source file without guessing an extension or requiring it to exist. Dynamic `require_relative`, `Dir.glob`, `Dir[]`, `Dir.entries`, `Dir.children`, `const_get`, eval variants and dynamic sends are conservatively recorded as hazards; hazards only make a file mandatory when it is classified as a spec.
 
-This slice does **not** yet resolve the transitive constant graph, trace runtime opens, hash inventories, select or run tests, export artifacts, or prove absence of false negatives. Static facts alone cannot safely cover Ruby's dynamic behavior; do not use this slice by itself to skip tests. The UI remains a fixture-driven simulation.
+The static pass by itself does **not** resolve the transitive constant graph, trace runtime opens, select or run tests, or prove absence of false negatives. Static facts alone cannot safely cover Ruby's dynamic behavior; do not use this slice by itself to skip tests. The UI remains a fixture-driven simulation.
 
 ## Scoped Ruby access tracing
 
-This slice adds an opt-in, process-local observation API; it is **not** yet wired to RSpec, persisted artifacts, or selection:
+This slice adds an opt-in, process-local observation API; it is **not** yet wired to RSpec or safe execution. Reports can be fed to the incomplete artifact index below:
 
 ```ruby
 require "cleave"
@@ -105,4 +105,23 @@ changes = loaded_inventory.diff(Cleave::Inventory.capture_git(root: Dir.pwd, gen
 
 Spec **paths** are identities; within each index they are sorted and assigned contiguous zero-based bit positions. Positions can change when specs are added or removed, so do not combine masks from different indexes. Trace observations for absent paths are retained, including failed reads; root-scope paths are stored separately. Unknown scopes and mismatched trace roots are rejected. External paths are omitted and noted as a limitation. Multiple explicitly collected reports can be supplied, but this does not prove all processes or tests were observed.
 
-The two JSON files have explicit schemas and versions. Bitmap masks are canonical lowercase hexadecimal integers; the index binds to the inventory's content fingerprint. Reading validates fields, paths, duplicate JSON keys, IDs/ranges, and the fingerprint, and rejects unsupported versions or incomplete/mismatched pairs. Each file is replaced atomically, but the pair is **not** a single atomic transaction. A fingerprint detects a mixed pair when inventories differ; it is not an authenticity signature or a guarantee against concurrent writers. Both artifacts deliberately record `complete: false`. **Do not use this index to skip tests.** The selector, safety fallback, UI import, and CLI integration are later slices.
+The two JSON files have explicit schemas and versions. Bitmap masks are canonical lowercase hexadecimal integers; the index binds to the inventory's content fingerprint. Reading validates fields, paths, duplicate JSON keys, IDs/ranges, and the fingerprint, and rejects unsupported versions or incomplete/mismatched pairs. Each file is replaced atomically, but the pair is **not** a single atomic transaction. A fingerprint detects a mixed pair when inventories differ; it is not an authenticity signature or a guarantee against concurrent writers. Both artifacts deliberately record `complete: false`. **Do not use this index to skip tests.** Safe selective execution, UI import, and CLI integration are later slices.
+
+## Bitmap selection preview
+
+```ruby
+# `baseline` and `index` must be a validated pair; `current` is a new inventory.
+# Independently discover every current spec first (including new and renamed specs).
+result = Cleave::Selection.select(
+  baseline: baseline, current: current, index: index, current_specs: all_current_spec_paths
+)
+p result.changes                # added / deleted / modified paths
+p result.candidate_specs        # OBSERVED preview, not an execution list
+p result.selected_specs         # all supplied current specs, because fallback is mandatory
+p result.fallback_reasons       # includes "incomplete_index"
+p result.union_nanoseconds      # monotonic time for bitmap OR only
+```
+
+The preview ORs each changed path's recorded bitmap, attributes its bits to changed files, and additionally includes changed or newly discovered specs. `observed_baseline_mask` uses baseline index positions; `candidate_mask` and `execution_mask` use the sorted **current** spec positions. Removed specs are not execution candidates. Each decision exposes its bitmap sources, changed/unindexed status and fallback reasons. Root-scope changes and unmapped changes are reported separately. Timings are actual measurements, not a guaranteed latency target.
+
+**This API cannot authorize skipping or execute tests.** Every v1 index is incomplete, so `requires_full_suite?` is always true and `execution_ready?` is always false. `selected_specs` and `execution_mask` are full only over the caller-supplied current universe: independently discover the full suite; they cannot prove it contains every test. Omission of an indexed spec still present in the inventory is rejected, but unknown new/custom test paths cannot be inferred reliably. A future runner must invoke full-suite discovery when this fallback is set, never dispatch the preview or rely on the supplied list alone. Previous-failure and Prism guardrails, execution, static dependency resolution and shadow verification are not implemented by this slice.
