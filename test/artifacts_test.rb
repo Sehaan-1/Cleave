@@ -121,6 +121,7 @@ class ArtifactsTest < Minitest::Test
     assert_equal index.to_h, loaded_index.to_h
     modified = Cleave::Inventory.new(@inventory.files.merge("different.rb" => "a" * 64))
     assert_raises(Cleave::ArtifactError) { Cleave::BitmapIndex.load(JSON.generate(index.to_h), inventory: modified) }
+    assert_raises(Cleave::ArtifactError) { Cleave::Artifacts.write(directory, inventory: modified, index: index) }
     bad_inventory = @inventory.to_h.merge("fingerprint" => "0" * 64)
     assert_raises(Cleave::ArtifactError) { Cleave::Inventory.load(JSON.generate(bad_inventory)) }
     assert_raises(Cleave::ArtifactError) { Cleave::Inventory.load('{"schema":"x","schema":"y"}') }
@@ -138,6 +139,8 @@ class ArtifactsTest < Minitest::Test
     mutations.each { |item| assert_raises(Cleave::ArtifactError) { Cleave::BitmapIndex.load(JSON.generate(item), inventory: @inventory) } }
     File.write(File.join(directory, "inventory.json"), JSON.generate(modified.to_h))
     assert_raises(Cleave::ArtifactError) { Cleave::Artifacts.read(directory) }
+    File.delete(File.join(directory, "bitmap_index.json"))
+    assert_match(/artifact pair is incomplete/, assert_raises(Cleave::ArtifactError) { Cleave::Artifacts.read(directory) }.message)
   end
 
   def test_reject_unknown_scopes_missing_specs_and_malformed_trace_events

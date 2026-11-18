@@ -298,6 +298,8 @@ module Cleave
       inventory = Inventory.load(File.binread(File.join(directory, "inventory.json")))
       index = BitmapIndex.load(File.binread(File.join(directory, "bitmap_index.json")), inventory: inventory)
       [inventory, index]
+    rescue Errno::ENOENT => error
+      raise ArtifactError, "artifact pair is incomplete: #{error.message}"
     end
   end
 end
