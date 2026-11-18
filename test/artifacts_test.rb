@@ -62,6 +62,8 @@ class ArtifactsTest < Minitest::Test
     ["/etc/passwd", "../outside", "spec/../bad", ".git/config", "a//b", "a\\b", "x\0y", ""].each do |path|
       assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: [path]) }
     end
+    assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: ["\xFF".dup.force_encoding(Encoding::UTF_8)]) }
+    assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: ["filename".b]) }
     File.symlink(File.join(@root, "config"), File.join(@root, "link"))
     assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: ["link/rails.yml"]) }
     assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: ["config"]) }
