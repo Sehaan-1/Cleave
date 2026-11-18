@@ -62,6 +62,20 @@ class GuardrailsTest < Minitest::Test
     assert hazard.frozen?
   end
 
+  def test_new_migration_is_covered_by_unconditional_prism_hazard
+    FileUtils.mkdir_p(File.join(@root, "db/migrations"))
+    path = "db/migrations/20261118_add_settlement_index.rb"
+    write(path, "class SettlementIndex; end\n")
+    @paths << path
+    result = plan
+    assert_equal [path], result.selection.changes[:added]
+    assert_includes result.selection.unmapped_changes, path
+    assert_equal 0, result.selection.candidate_mask
+    assert_equal 2, result.mandatory_mask
+    assert_equal ["spec/b_spec.rb"], result.guardrailed_candidate_specs
+    assert_equal 15, result.execution_mask
+  end
+
   def test_root_scope_change_forces_full_mask_even_for_preview
     write("config/boot.yml", "after\n")
     result = plan
