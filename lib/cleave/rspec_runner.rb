@@ -60,7 +60,7 @@ module Cleave
           jobs = groups.each_with_index.map do |group, i|
             json = File.join(temp, "worker-#{i}.json")
             log = File.join(temp, "worker-#{i}.log")
-            command = ["bundle", "exec", "rspec", "--format", "json", "--out", json]
+            command = ["bundle", "exec", "rspec", "--format", "progress", "--format", "json", "--out", json]
             command += ["--", *group] if group
             [spawn_job(root, command, log, children), json, log, group]
           end
