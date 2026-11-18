@@ -60,6 +60,7 @@ module Cleave
       state["verification"] = { "status" => "running" } if verify
       state["trace"] = { "status" => "running", "complete" => false } if trace
       state["index"] = { "status" => "running", "complete" => false } if index
+      generation_id = IndexProvenance.begin_run(state_dir) if index
       write_state(trace_path, TraceCapture.incomplete("running")) if trace
       write_state(status_path, state)
       children = []
@@ -73,12 +74,12 @@ module Cleave
               state["index"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
             end
           end
-          verification_files = current = plan = nil
+          verification_files = current = plan = provenance = nil
           if verify
             begin
               verification_files = discover(root, temp, output, children)
               state["telemetry"]["discovered_spec_files"] = verification_files.length
-              current, plan = ShadowVerification.prepare(root: root, files: verification_files)
+              current, plan, provenance = ShadowVerification.prepare(root: root, files: verification_files)
             rescue StandardError => error
               state["verification"] = { "status" => "incomplete", "errors" => ["#{error.class}: #{error.message}"] }
             end
@@ -131,7 +132,7 @@ module Cleave
           state["reports_complete"] = state["errors"].empty?
           if verify && plan
             state["verification"] = ShadowVerification.finish(root: root, files: verification_files,
-                                                               current: current, plan: plan, state: state, observed_specs: seen_specs.to_a)
+                                                               current: current, plan: plan, state: state, observed_specs: seen_specs.to_a, provenance: provenance)
           end
           report = nil
           if trace
@@ -149,7 +150,8 @@ module Cleave
             begin
               raise ArtifactError, "trace capture was incomplete" unless report && state.dig("trace", "status") == "recorded"
               state["index"] = IndexGeneration.finish(root: root, directory: state_dir, before: baseline,
-                                                       includes: include_paths, report: report, specs: seen_specs.to_a.sort)
+                                                       includes: include_paths, report: report, specs: seen_specs.to_a.sort,
+                                                       generation_id: generation_id, failed_examples: !state["observed_failed_specs"].empty?)
             rescue StandardError => error
               state["index"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
             end
@@ -190,6 +192,7 @@ module Cleave
         state["errors"] << "#{error.class}: #{error.message}"
       ensure
         terminate(children)
+        IndexProvenance.incomplete(state_dir, generation_id) if index && state.dig("index", "status") != "recorded"
       end
       state["observed_failed_specs"] = state["observed_failed_specs"].uniq.sort
       state["telemetry"]["runner_elapsed_ns"] = Telemetry.now - started

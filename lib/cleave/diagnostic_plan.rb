@@ -40,6 +40,7 @@ module Cleave
         end
         inventory = Inventory.load(inventory_text)
         index = BitmapIndex.load(index_text, inventory: inventory)
+        provenance = IndexProvenance.check(state, inventory_text: inventory_text, index_text: index_text, inventory: inventory)
         raise ArtifactError, "baseline inventory must not include .cleave state" if inventory.files.keys.any? { |path| internal?(path) }
         extras = inventory.files.keys + includes
         before = ShadowVerification.capture(root, extras)
@@ -54,7 +55,7 @@ module Cleave
                                  current_specs: files, previous_failures: nil)
           after = ShadowVerification.capture(root, extras + files)
           raise ArtifactError, "project changed during planning" unless current.fingerprint == after.fingerprint
-          serialize(inventory, current, plan)
+          serialize(inventory, current, plan, provenance: provenance)
         end
       ensure
         lock.flock(File::LOCK_UN) if lock
@@ -84,10 +85,15 @@ module Cleave
     end
     private_class_method :read_artifact
 
-    def serialize(baseline, current, plan)
+    def serialize(baseline, current, plan, provenance:)
       selection = plan.selection
       candidates = plan.guardrailed_candidate_specs
       candidate_set = candidates.to_set
+      provenance_note = if provenance["status"] == "recorded"
+        "Artifact bytes match a local publication marker; this is not authentication or proof of coverage."
+      else
+        "Artifact publication provenance is unavailable; this may be a legacy or manually created pair."
+      end
       { "schema" => SCHEMA, "version" => VERSION,
         "diagnostic_only" => true, "suite_coverage_verified" => false,
         "requires_full_suite" => true, "execution_ready" => false,
@@ -99,7 +105,7 @@ module Cleave
         "fallback_reasons" => plan.fallback_reasons,
         "previous_failures_available" => plan.previous_failures_available?,
         "union_nanoseconds" => selection.union_nanoseconds,
-        "limitations" => (selection.limitations + LIMITATIONS).uniq.sort,
+        "limitations" => (selection.limitations + LIMITATIONS + [provenance_note]).uniq.sort,
         "decisions" => plan.decisions.map do |decision|
           { "spec" => decision.spec, "candidate" => candidate_set.include?(decision.spec),
             "bitmap_sources" => decision.selection.bitmap_sources,
