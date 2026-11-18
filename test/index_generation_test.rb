@@ -7,6 +7,7 @@ require "fileutils"
 require "stringio"
 require "open3"
 require "json"
+require "timeout"
 
 class IndexGenerationTest < Minitest::Test
   def setup
@@ -111,6 +112,38 @@ class IndexGenerationTest < Minitest::Test
     assert_equal "incomplete", result["outcome"], "#{result.inspect}\n#{output}"
     assert_match(/symlink/, result.dig("index", "error"))
     assert_equal "{}", File.read(File.join(@root, "a.json"))
+  end
+
+  def test_missing_include_and_symlinked_include_are_rejected
+    result, output = run_index(includes: ["ignored/missing.json"])
+    assert_equal "incomplete", result["outcome"], "#{result.inspect}\n#{output}"
+    assert_equal 2, result["example_count"]
+    assert_match(/included files are missing/, result.dig("index", "error"))
+    File.symlink(File.join(@root, "a.json"), File.join(@root, "ignored/link.json"))
+    result, output = run_index(includes: ["ignored/link.json"])
+    assert_equal "incomplete", result["outcome"], "#{result.inspect}\n#{output}"
+    assert_match(/symlink/, result.dig("index", "error"))
+  end
+
+  def test_interrupt_records_incomplete_index_without_publishing
+    write("spec/slow_spec.rb", "RSpec.describe('slow') { it('waits') { File.write('.cleave/started', 'yes'); sleep 60 } }\n")
+    env = { "BUNDLE_GEMFILE" => File.join(@root, "Gemfile"), "BUNDLE_FROZEN" => "false" }
+    pid = Process.spawn(env, "bundle", "exec", "cleave", "run", "--trace", "--index", chdir: @root, out: File::NULL, err: File::NULL)
+    begin
+      Timeout.timeout(30) { sleep 0.05 until File.exist?(File.join(@root, ".cleave/started")) }
+      Process.kill("INT", pid)
+      _, status = Timeout.timeout(10) { Process.wait2(pid) }
+      pid = nil
+      assert_equal 130, status.exitstatus
+      state = JSON.parse(File.read(File.join(@root, ".cleave/last_run.json")))
+      assert_equal "incomplete", state.dig("index", "status")
+      refute File.exist?(File.join(@root, ".cleave/inventory.json"))
+    ensure
+      if pid
+        Process.kill("KILL", pid) rescue nil
+        Process.wait(pid) rescue nil
+      end
+    end
   end
 
   def test_crash_does_not_publish_pair

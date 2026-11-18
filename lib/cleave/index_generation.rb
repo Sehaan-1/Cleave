@@ -23,7 +23,10 @@ module Cleave
       stdout, stderr, status = Open3.capture3("git", "-C", root, "rev-parse", "--show-toplevel")
       raise ArtifactError, "git root unavailable: #{stderr.strip}" unless status.success?
       raise ArtifactError, "index generation requires the Git project root" unless File.realpath(stdout.strip) == root
-      [ShadowVerification.capture(root, paths), paths]
+      inventory = ShadowVerification.capture(root, paths)
+      missing = paths - inventory.files.keys
+      raise ArtifactError, "included files are missing: #{missing.join(', ')}" unless missing.empty?
+      [inventory, paths]
     rescue Errno::ENOENT => error
       raise ArtifactError, "cannot access Git root: #{error.message}"
     end
