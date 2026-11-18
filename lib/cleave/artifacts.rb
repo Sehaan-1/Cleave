@@ -16,7 +16,7 @@ module Cleave
     module_function
 
     def path(value)
-      unless value.is_a?(String) && value.encoding != Encoding::ASCII_8BIT && value.valid_encoding? && !value.empty? &&
+      unless value.is_a?(String) && [Encoding::UTF_8, Encoding::US_ASCII].include?(value.encoding) && value.valid_encoding? && !value.empty? &&
              !value.start_with?("/") && !value.include?("\\") && !value.include?("\0") &&
              value.split("/", -1).none? { |part| part.empty? || part == "." || part == ".." || part == ".git" }
         raise ArtifactError, "invalid repository-relative path: #{value.inspect}"
