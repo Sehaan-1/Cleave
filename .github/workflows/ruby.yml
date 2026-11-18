@@ -14,4 +14,14 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-      - run: bundle exec ruby -Ilib -e 'Dir["test/*_test.rb"].sort.each { |file| require_relative file }'
+      - name: Run Ruby tests
+        shell: bash
+        run: |
+          set +e
+          bundle exec ruby -Ilib -e 'Dir["test/*_test.rb"].sort.each { |file| require_relative file }' 2>&1 | tee /tmp/cleave-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            message=$(tail -c 12000 /tmp/cleave-test.log | python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))')
+            echo "::error::$message"
+          fi
+          exit "$status"
