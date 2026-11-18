@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Cleave · Observed dependency graph</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#e3e6eb;background:#121316}*{box-sizing:border-box}body{margin:0;height:100dvh;overflow:hidden}button,input{font:inherit;color:inherit}button{cursor:pointer;border:0;background:#20232a}button:hover:not(:disabled){background:#282c35}button:focus-visible,input:focus-visible{outline:2px solid #61b975;outline-offset:-2px}button:disabled{opacity:.45;cursor:default}.mono,.path,.count{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}.muted{color:#9ba3af}.eyebrow{color:#9ba3af;font-size:11px;text-transform:uppercase;letter-spacing:.09em;font-weight:650}.app{display:flex;flex-direction:column;height:100%;gap:4px}.top{background:#181a1f;display:flex;align-items:center;gap:18px;padding:0 16px;min-height:56px}.brand{font-weight:750;letter-spacing:.08em}.top h1{margin:0;font-size:15px;font-weight:600}.top .meta{margin-left:auto}.warning{background:#30281b;color:#eed7a5;padding:10px 16px;line-height:1.4}.main{min-height:0;display:grid;grid-template-columns:minmax(235px,300px) minmax(0,1fr);gap:4px;flex:1}.sidebar,.content{background:#181a1f;min-height:0;display:flex;flex-direction:column}.side-head{padding:16px 14px 10px}.side-head h2,.detail-head h2{font-size:14px;margin:5px 0 0}.tabs{display:flex;gap:2px;margin:12px 0 8px}.tabs button{flex:1;padding:8px 10px;text-align:left}.tabs button[aria-pressed=true]{background:#282c35;color:#fff}.search{width:100%;background:#20232a;border:0;padding:9px 10px}.list-info{padding:3px 14px 8px}.list{overflow:auto;min-height:0;flex:1;padding:0 4px}.item{display:block;width:100%;text-align:left;padding:10px;border-radius:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent}.item[aria-current=true]{background:#282c35;color:#fff}.item .root{color:#e5534b;margin-right:7px}.pager{display:flex;align-items:center;gap:8px;padding:10px 14px}.pager .count{flex:1;color:#9ba3af}.pager button{padding:6px 10px}.detail-head{padding:16px 20px 14px}.detail-head h2{overflow-wrap:anywhere;font-family:"JetBrains Mono",ui-monospace,monospace;line-height:1.5}.sub{line-height:1.5;margin-top:7px;color:#9ba3af}.root-note{margin:0 20px 12px;padding:10px 12px;background:#302223;color:#efb1ad;line-height:1.5}.canvas{flex:1;min-height:0;overflow:auto;padding:18px 20px;background:#121316;margin:0 4px}.graph{display:grid;grid-template-columns:minmax(145px, min(38%, 330px)) minmax(180px,1fr);align-items:center;gap:32px;min-height:220px}.node{background:#20232a;padding:14px;overflow-wrap:anywhere;line-height:1.5}.node .eyebrow{display:block;margin-bottom:6px}.chosen{border-left:3px solid #2ea043;position:relative}.chosen.has-relations:after{content:"";position:absolute;right:-32px;top:50%;width:32px;height:2px;background:#486a53}.targets{border-left:2px solid #486a53;padding-left:22px;display:flex;flex-direction:column;gap:4px}.target{position:relative;text-align:left;width:100%;padding:10px 12px;overflow-wrap:anywhere;background:#20232a;line-height:1.45}.target:before{content:"";position:absolute;left:-24px;top:50%;width:22px;height:2px;background:#486a53}.empty{color:#9ba3af;line-height:1.5;padding:12px 0}.bottom{display:flex;align-items:center;gap:14px;padding:10px 20px;min-height:52px}.bottom .count{flex:1}.bottom button{padding:7px 10px}.limitations{margin:0 20px 14px;color:#9ba3af;line-height:1.5}.limitations summary{cursor:pointer;color:#c5cad2}.limitations ul{margin:8px 0 0;padding-left:20px;max-height:90px;overflow:auto}.noscript{padding:16px;background:#30281b}
+@media(max-width:700px){.top{min-height:48px;gap:10px}.top .meta{display:none}.warning{padding:8px 12px}.main{grid-template-columns:minmax(150px,37%) minmax(0,1fr)}.side-head{padding:12px 8px 6px}.tabs{flex-direction:column;margin:8px 0}.list-info{padding:2px 8px}.pager{padding:8px 4px;gap:2px;flex-wrap:wrap}.pager .count{flex-basis:100%}.detail-head{padding:12px}.root-note{margin:0 12px 8px}.canvas{padding:12px 10px}.graph{grid-template-columns:1fr;gap:16px;min-height:0}.targets{margin-left:14px}.chosen.has-relations:after{left:14px;right:auto;top:100%;width:2px;height:16px}.bottom{padding:8px 12px;gap:4px;flex-wrap:wrap}.bottom .count{flex-basis:100%}.limitations{margin:0 12px 10px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top"><span class="brand">// CLEAVE</span><h1>Observed dependency graph</h1><span class="meta mono muted" id="fingerprint"></span></header>
+<div class="warning"><strong>Incomplete index.</strong> These are recorded observations, not proof of dependency coverage. Do not use this graph to skip tests.</div>
+<noscript><div class="noscript">JavaScript is required to explore this local graph.</div></noscript>
+<main class="main">
+<aside class="sidebar" aria-label="Graph navigation">
+<div class="side-head"><span class="eyebrow">Explore index</span><h2>Paths and specs</h2><div class="tabs" role="group" aria-label="Explore by"><button type="button" id="files-tab" aria-pressed="true">Observed paths</button><button type="button" id="specs-tab" aria-pressed="false">Indexed specs</button></div><label for="search" class="eyebrow">Filter paths</label><input class="search" id="search" type="search" autocomplete="off" placeholder="Search paths"></div>
+<div class="list-info muted" id="list-info" aria-live="polite"></div><div class="list" id="list" aria-label="Matching paths"></div>
+<div class="pager"><span class="count" id="list-page"></span><button type="button" id="list-prev">Previous</button><button type="button" id="list-next">Next</button></div>
+</aside>
+<section class="content" aria-label="Dependency graph">
+<div class="detail-head"><span class="eyebrow" id="detail-label">Recorded relationship</span><h2 id="detail-title">No observed paths</h2><div class="sub" id="detail-sub">Choose a path or indexed spec to inspect its recorded relationships.</div></div>
+<div class="root-note" id="root-note" hidden>Observed in root scope. A change to this path triggers full-suite fallback in the diagnostic plan; root scope does not identify individual spec edges.</div>
+<div class="canvas"><div class="graph" id="graph"></div></div>
+<div class="bottom"><span class="count muted" id="edge-page" aria-live="polite"></span><button type="button" id="edge-prev">Previous</button><button type="button" id="edge-next">Next</button></div>
+<details class="limitations"><summary>Index limitations</summary><ul id="limitations"></ul></details>
+</section>
+</main>
+</div>
+<script>
+'use strict';
+const data = __CLEAVE_GRAPH_DATA__;
+const byId = id => document.getElementById(id);
+const listSize = 50, edgeSize = 8;
+let mode = 'files', query = '', selected = null, listPage = 0, edgePage = 0;
+const masks = data.files.map(file => BigInt(file.hex));
+byId('fingerprint').textContent = 'Inventory ' + data.fingerprint;
+for (const limitation of data.limitations) { const li = document.createElement('li'); li.textContent = limitation; byId('limitations').append(li); }
+function matching() {
+  const entries = mode === 'files' ? data.files.map((f, id) => ({id, path:f.path})) : data.specs.map((path, id) => ({id, path}));
+  const needle = query.toLocaleLowerCase();
+  return entries.filter(entry => entry.path.toLocaleLowerCase().includes(needle));
+}
+function choose(nextMode, id) {
+  mode = nextMode; selected = id; query = ''; byId('search').value = ''; edgePage = 0;
+  listPage = Math.floor(id / listSize); render();
+}
+function setMode(nextMode) { mode = nextMode; selected = null; query = ''; byId('search').value = ''; listPage = 0; edgePage = 0; render(); }
+function renderList() {
+  const items = matching();
+  listPage = Math.min(listPage, Math.max(0, Math.ceil(items.length / listSize) - 1));
+  byId('files-tab').setAttribute('aria-pressed', String(mode === 'files'));
+  byId('specs-tab').setAttribute('aria-pressed', String(mode === 'specs'));
+  byId('list-info').textContent = items.length + ' matching ' + (mode === 'files' ? 'observed paths' : 'indexed specs');
+  const list = byId('list'); list.replaceChildren();
+  for (const item of items.slice(listPage * listSize, (listPage + 1) * listSize)) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'item path';
+    button.setAttribute('aria-current', String(selected === item.id)); button.title = item.path;
+    if (mode === 'files' && data.files[item.id].root) { const root = document.createElement('span'); root.className = 'root'; root.textContent = 'r'; root.setAttribute('aria-hidden', 'true'); button.setAttribute('aria-label', 'root scope ' + item.path); button.append(root); }
+    button.append(document.createTextNode(item.path));
+    button.addEventListener('click', () => { selected = item.id; edgePage = 0; render(); }); list.append(button);
+  }
+  byId('list-page').textContent = items.length ? (listPage * listSize + 1) + '–' + Math.min((listPage + 1) * listSize, items.length) + ' / ' + items.length : '0 / 0';
+  byId('list-prev').disabled = listPage === 0; byId('list-next').disabled = (listPage + 1) * listSize >= items.length;
+  return items;
+}
+function relations() {
+  if (selected === null) return [];
+  if (mode === 'files') {
+    const result = []; let mask = masks[selected], id = 0;
+    while (mask > 0n) { if (mask & 1n) result.push({id, path:data.specs[id]}); mask >>= 1n; id++; }
+    return result;
+  }
+  const bit = 1n << BigInt(selected);
+  return data.files.flatMap((file, id) => (masks[id] & bit) !== 0n ? [{id, path:file.path}] : []);
+}
+function renderGraph() {
+  const graph = byId('graph'); graph.replaceChildren();
+  if (selected === null) {
+    byId('detail-label').textContent = 'Recorded relationship'; byId('detail-title').textContent = 'No selection';
+    byId('detail-sub').textContent = 'Choose an observed path or indexed spec to inspect its recorded relationships.';
+    byId('root-note').hidden = true; byId('edge-page').textContent = 'No relationships selected';
+    byId('edge-prev').disabled = true; byId('edge-next').disabled = true; return;
+  }
+  const file = mode === 'files' ? data.files[selected] : null;
+  const path = file ? file.path : data.specs[selected];
+  const edges = relations(); edgePage = Math.min(edgePage, Math.max(0, Math.ceil(edges.length / edgeSize) - 1));
+  byId('detail-label').textContent = file ? 'Observed path' : 'Indexed spec';
+  byId('detail-title').textContent = path;
+  byId('detail-sub').textContent = (file && !file.in_inventory ? 'Not present in baseline inventory · ' : '') + edges.length + (file ? ' recorded spec associations' : ' recorded path associations') + ' · operation types, attempts and successes are combined';
+  byId('root-note').hidden = !(file && file.root);
+  const source = document.createElement('div'); source.className = 'node chosen' + (edges.length ? ' has-relations' : '');
+  const label = document.createElement('span'); label.className = 'eyebrow'; label.textContent = file ? 'Observed path' : 'Indexed spec';
+  const sourcePath = document.createElement('span'); sourcePath.className = 'path'; sourcePath.textContent = path; source.append(label, sourcePath); graph.append(source);
+  const targets = document.createElement('div');
+  if (edges.length) {
+    targets.className = 'targets';
+    for (const edge of edges.slice(edgePage * edgeSize, (edgePage + 1) * edgeSize)) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'target path'; button.textContent = edge.path;
+      button.setAttribute('aria-label', (file ? 'Inspect spec ' : 'Inspect path ') + edge.path);
+      button.addEventListener('click', () => choose(file ? 'specs' : 'files', edge.id)); targets.append(button);
+    }
+  } else { targets.className = 'empty'; targets.textContent = file && file.root ? 'No per-spec associations recorded for this path.' : 'No recorded associations. This does not mean there are no dependencies.'; }
+  graph.append(targets);
+  byId('edge-page').textContent = edges.length ? (edgePage * edgeSize + 1) + '–' + Math.min((edgePage + 1) * edgeSize, edges.length) + ' / ' + edges.length + ' recorded associations' : '0 recorded associations';
+  byId('edge-prev').disabled = edgePage === 0; byId('edge-next').disabled = (edgePage + 1) * edgeSize >= edges.length;
+}
+function render() { renderList(); renderGraph(); }
+byId('files-tab').addEventListener('click', () => setMode('files'));
+byId('specs-tab').addEventListener('click', () => setMode('specs'));
+byId('search').addEventListener('input', event => { query = event.target.value; listPage = 0; renderList(); });
+byId('list-prev').addEventListener('click', () => { listPage--; renderList(); });
+byId('list-next').addEventListener('click', () => { listPage++; renderList(); });
+byId('edge-prev').addEventListener('click', () => { edgePage--; renderGraph(); });
+byId('edge-next').addEventListener('click', () => { edgePage++; renderGraph(); });
+if (data.files.length) selected = 0;
+render();
+</script>
+</body>
+</html>

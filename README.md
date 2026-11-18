@@ -173,3 +173,15 @@ Verification currently requires one worker; `--workers` greater than one is reje
 Every completed CLI run prints a plain-text telemetry summary and records the underlying integer measurements in `.cleave/last_run.json` under `telemetry` (version 1). `runner_elapsed_ns` is monotonic wall time from the start of locked execution through processing and cleanup, excluding lock acquisition and the final status write. `worker_collection_elapsed_ns` covers launching workers, waiting for them, streaming their output and parsing their reports; parallel time is wall time, not the sum of worker runtimes. It is unavailable if collection aborts. Interrupted runs persist elapsed runner time but do not print the final summary.
 
 Example outcome counts and spec-file counts are derived from successfully parsed RSpec reports. A partial report label means those counts may omit workers or examples and must not be interpreted as suite totals. A file counts once if at least one of its examples appears in a successfully parsed report. Discovery counts are unavailable for a normal serial run, which deliberately does not perform dry-run discovery. With `--verify`, the summary also shows the guardrailed diagnostic candidate count, the measured bitmap OR time (only the OR loop, not planning), and observed missed failing files; if planning fails, the candidate is unavailable. These are observations, not a measurement of tests skipped, runtime saved, or a false-negative rate. Actual execution remains the configured full suite and suite coverage is unverified.
+
+## Export an observed dependency graph
+
+From the project root, with an existing validated `.cleave/inventory.json` and `.cleave/bitmap_index.json` pair:
+
+```sh
+bundle exec cleave graph --output .cleave/graph.html
+```
+
+Open the generated HTML file locally in a modern browser. It is self-contained and uses no network requests. Search and page through observed paths or indexed specs, follow associations in either direction, and inspect recorded root-scope paths and index limitations. Long lists are paginated without dropping associations. An existing regular output file is replaced atomically; symlink output targets are rejected, and the output directory must already exist. Artifact paths and limitations are escaped before embedding; nevertheless, only open exports and artifacts from sources you trust.
+
+The graph reflects **baseline artifact observations**, not the current diff or a live trace. A bitmap associates an observed path with a spec; it does not retain operation types, distinguish attempts from successful reads, identify precise lines, or prove that an edge is exhaustive. Root-scope observations are shown separately, not fabricated as per-spec edges. An observed path absent from the inventory may represent a missing-file attempt. External paths were omitted by the indexer. The index is incomplete and configured-suite coverage is not verified: **never use this graph to decide which tests to skip**. Static graph resolution, the workbench artifact importer and `cleave ui` remain separate work.

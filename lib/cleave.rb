@@ -16,3 +16,5 @@ require_relative "cleave/rspec_runner"
 require_relative "cleave/shadow_verification"
 
 require_relative "cleave/telemetry"
+
+require_relative "cleave/graph_export"
