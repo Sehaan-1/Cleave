@@ -109,6 +109,29 @@ class RSpecRunnerTest < Minitest::Test
     assert_includes result["errors"], "No RSpec examples were reported."
   end
 
+  def test_errors_outside_examples_are_not_reported_as_a_clean_run
+    spec("a_spec.rb", <<~RUBY)
+      RSpec.configure { |c| c.after(:suite) { raise "suite cleanup failed" } }
+      RSpec.describe('x') { it('passes') { expect(1).to eq(1) } }
+    RUBY
+    result, _, = run_suite
+    assert_equal "incomplete", result["outcome"]
+    assert_equal 1, result["exit_code"]
+    refute result["reports_complete"]
+    assert_match(/outside examples/, result["errors"].join)
+  end
+
+  def test_existing_run_lock_prevents_overwriting_the_status
+    directory = File.join(@root, ".cleave")
+    FileUtils.mkdir_p(directory)
+    File.write(File.join(directory, "last_run.json"), "previous")
+    File.open(File.join(directory, "runner.lock"), File::RDWR | File::CREAT, 0o600) do |lock|
+      assert lock.flock(File::LOCK_EX | File::LOCK_NB)
+      assert_raises(Cleave::RunnerError) { Cleave::RSpecRunner.run(root: @root) }
+      assert_equal "previous", File.read(File.join(directory, "last_run.json"))
+    end
+  end
+
   def test_worker_crash_does_not_leave_a_false_success_or_old_failure_record
     spec("a_spec.rb", "RSpec.describe('crash') { it('exits') { exit! 7 } }\n")
     result, _, persisted = run_suite
@@ -140,9 +163,12 @@ class RSpecRunnerTest < Minitest::Test
   def test_interrupt_terminates_workers_and_persists_incomplete_status
     spec("a_spec.rb", "RSpec.describe('slow') { it('waits') { File.write('started', 'yes'); sleep 60 } }\n")
     env = { "BUNDLE_GEMFILE" => File.join(@root, "Gemfile"), "BUNDLE_FROZEN" => "false" }
+    FileUtils.mkdir_p(File.join(@root, ".cleave"))
+    File.write(File.join(@root, ".cleave/last_run.json"), '{"outcome":"passed"}')
     pid = Process.spawn(env, "bundle", "exec", "cleave", chdir: @root, out: File::NULL, err: File::NULL)
     begin
       Timeout.timeout(30) { sleep 0.05 until File.exist?(File.join(@root, "started")) }
+      assert_equal "running", JSON.parse(File.read(File.join(@root, ".cleave/last_run.json")))["outcome"]
       Process.kill("INT", pid)
       _, status = Timeout.timeout(10) { Process.wait2(pid) }
       pid = nil
