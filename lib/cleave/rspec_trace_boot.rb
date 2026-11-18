@@ -11,7 +11,7 @@ module Cleave
     OWNER = Process.pid
     TRACE = ScopedTrace.start(root: ROOT)
     TRACE.limitation("RSpec scopes example execution on the same fiber; file loading, suite/context hooks and hooks outside Cleave’s around hook are root scope.")
-    TRACE.limitation("Cleave's .cleave state directory is omitted from this report.")
+    TRACE.limitation("Cleave state and project .git paths are omitted from this report.")
     @hook_installed = false
 
     class << self
@@ -23,7 +23,10 @@ module Cleave
       if Process.pid == OWNER
         begin
           report = TRACE.stop.to_h
-          report["events"].reject! { |event| event["path"] == ".cleave" || event["path"].start_with?(".cleave/") }
+          report["events"].reject! do |event|
+            path = event["path"]
+            path == ".cleave" || path.start_with?(".cleave/") || (!Pathname.new(path).absolute? && path.split("/").include?(".git"))
+          end
           File.write(DESTINATION, JSON.generate("hook_installed" => @hook_installed, "report" => report))
         rescue StandardError => error
           warn "Cleave trace collection failed: #{error.class}: #{error.message}"

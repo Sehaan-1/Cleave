@@ -38,6 +38,7 @@ class RSpecTraceCaptureTest < Minitest::Test
 
   def test_full_suite_captures_root_and_example_scopes_without_skipping
     %w[boot a b hook thread].each { |name| write("#{name}.json", "{}") }
+    write(".git/config", "private")
     write("spec/spec_helper.rb", "File.read('boot.json')\n")
     write(".rspec", "--require ./spec/spec_helper.rb\n")
     write("spec/a_spec.rb", <<~RUBY)
@@ -45,6 +46,7 @@ class RSpecTraceCaptureTest < Minitest::Test
         before(:example) { File.read('hook.json') }
         it('reads') do
           File.read('a.json')
+          File.read('.git/config')
           Thread.new { File.read('thread.json') }.join
           begin; File.read('missing.json'); rescue Errno::ENOENT; end
           expect(true).to be(true)
@@ -67,7 +69,7 @@ class RSpecTraceCaptureTest < Minitest::Test
       { "scope" => "spec/b_spec.rb", "path" => "b.json", "kind" => "io_read", "status" => "success" }
     ]
     expected.each { |item| assert_includes events, item }
-    refute events.any? { |event| event["path"].start_with?(".cleave/") }
+    refute events.any? { |event| event["path"].start_with?(".cleave/") || event["path"].start_with?(".git/") }
     assert_equal events.length, result.dig("trace", "event_count")
     refute result.dig("trace", "complete")
     report = Cleave::TraceCapture.read(File.join(@root, ".cleave/last_trace.json"), root: @root)

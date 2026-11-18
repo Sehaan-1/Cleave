@@ -118,7 +118,7 @@ report = Cleave::TraceCapture.read(".cleave/last_trace.json", root: Dir.pwd)
 # captured an inventory and independently established the spec universe.
 ```
 
-This is not automatic artifact/index generation. It does not prove suite discovery, child-process coverage, all filesystem operations, or absence of false negatives. `.cleave/` operations are excluded from the trace. Only the parent process report is collected; forked children cannot replace it. Trace reports are diagnostic and **must never be used to skip tests**. `--trace` currently requires one worker and cannot be combined with `--verify`.
+This is not automatic artifact/index generation. It does not prove suite discovery, child-process coverage, all filesystem operations, or absence of false negatives. `.cleave/` and project `.git/` operations are excluded from the trace. The trace is not bound to a content inventory and can become stale; a non-traced run does not replace the last traced run. Only the parent process report is collected; forked children cannot replace it. Trace reports are diagnostic and **must never be used to skip tests**. `--trace` currently requires one worker and cannot be combined with `--verify`.
 
 ## Inventory and bitmap artifacts
 
