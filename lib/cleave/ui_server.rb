@@ -85,7 +85,7 @@ module Cleave
       flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK)
       File.open(path, flags) do |file|
         raise ArtifactError, "artifact must be a regular file: #{File.basename(path)}" unless file.stat.file?
-        content = file.read(MAX_ARTIFACT_BYTES + 1) || ""
+        content = file.read(MAX_ARTIFACT_BYTES + 1) || +""
         raise ArtifactError, "artifact exceeds 10 MiB: #{File.basename(path)}" if content.bytesize > MAX_ARTIFACT_BYTES
         content.force_encoding(Encoding::UTF_8)
         raise ArtifactError, "artifact is not UTF-8: #{File.basename(path)}" unless content.valid_encoding?
