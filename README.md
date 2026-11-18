@@ -124,7 +124,18 @@ report = Cleave::TraceCapture.read(".cleave/last_trace.json", root: Dir.pwd)
 # captured an inventory and independently established the spec universe.
 ```
 
-Tracing alone does not generate artifacts; use the opt-in command below. It does not prove suite discovery, child-process coverage, all filesystem operations, or absence of false negatives. `.cleave/` and project `.git/` operations are excluded from the trace. The trace is not bound to a content inventory and can become stale; a non-traced run does not replace the last traced run. Only the parent process report is collected; forked children cannot replace it. Trace reports are diagnostic and **must never be used to skip tests**. `--trace` currently requires one worker and cannot be combined with `--verify`.
+Tracing alone does not generate artifacts; use the opt-in command below. It does not prove suite discovery, child-process coverage, all filesystem operations, or absence of false negatives. `.cleave/` and project `.git/` operations are excluded from the trace. The trace is not bound to a content inventory and can become stale; a non-traced run does not replace the last traced run. By default only the parent process report is collected; forked children cannot replace it. Trace reports are diagnostic and **must never be used to skip tests**. `--trace` currently requires one worker and cannot be combined with `--verify`.
+
+## Opt in to fork observations
+
+```sh
+bundle exec cleave run --trace --trace-forks
+bundle exec cleave run --trace --trace-forks --index
+```
+
+This opt-in supplements the parent trace with **best-effort** reports from Ruby processes forked through `Process._fork`, including ordinary `fork`/`Process.fork` children. A child starts with a fresh event set and inherits the spawning fiber's scope; unscoped child threads and fibers remain root scope. Reports published before the parent RSpec process exits are validated and merged into `.cleave/last_trace.json`; the run status and CLI show the number collected, not the number of children created. With `--index`, their recorded associations are included in the incomplete bitmap. The merged v1 trace and bitmap do not retain process identity or prove that an event occurred during the parent example: child work can outlive it.
+
+There is **no child coverage guarantee**. `exit!`, signals, crashes, `exec`, daemons, unsupported fork mechanisms, late/background children and unrelated subprocesses may not report; the collector does not wait for all descendants. Ruby-level hooks still miss native/direct filesystem calls. The implementation intercepts Ruby's `Process._fork` monitoring hook and requires a compatible fork-capable Ruby; custom process instrumentation may interact with it. Directory and report validation errors fail the capture rather than silently accepting malformed reports. Reporting cannot detect every child that failed to report. Artifact snapshots remain nontransactional, including when background children keep running. The index remains incomplete and **must never be used to skip tests**. Tracing and fork collection require one worker and cannot be combined with `--verify`.
 
 ## Inventory and bitmap artifacts
 

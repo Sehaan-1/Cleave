@@ -22,13 +22,15 @@ module Cleave
     STATUS_VERSION = 1
     MAX_WORKERS = 32
 
-    def run(root:, workers: 1, output: $stdout, verify: false, trace: false, index: false, includes: [])
+    def run(root:, workers: 1, output: $stdout, verify: false, trace: false, index: false, includes: [], trace_forks: false)
       raise ArgumentError, "workers must be an integer from 1 to #{MAX_WORKERS}" unless workers.is_a?(Integer) && workers.between?(1, MAX_WORKERS)
       raise ArgumentError, "verify must be true or false" unless [true, false].include?(verify)
       raise ArgumentError, "verification requires one worker" if verify && workers != 1
       raise ArgumentError, "trace must be true or false" unless [true, false].include?(trace)
       raise ArgumentError, "tracing requires one worker" if trace && workers != 1
       raise ArgumentError, "tracing and verification must be separate runs" if trace && verify
+      raise ArgumentError, "trace_forks must be true or false" unless [true, false].include?(trace_forks)
+      raise ArgumentError, "fork tracing requires tracing" if trace_forks && !trace
       raise ArgumentError, "index must be true or false" unless [true, false].include?(index)
       raise ArgumentError, "index generation requires tracing" if index && !trace
       raise ArgumentError, "includes require index generation" unless includes.is_a?(Array) && (index || includes.empty?)
@@ -45,13 +47,13 @@ module Cleave
       raise RunnerError, "runner files must not be symlinks" if File.symlink?(lock_path) || File.symlink?(status_path) || (trace && File.symlink?(trace_path))
       File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
         raise RunnerError, "another Cleave run is active" unless lock.flock(File::LOCK_EX | File::LOCK_NB)
-        execute(root, state_dir, status_path, workers, output, verify, trace, trace_path, index, includes)
+        execute(root, state_dir, status_path, workers, output, verify, trace, trace_path, index, includes, trace_forks)
       ensure
         lock.flock(File::LOCK_UN) if lock
       end
     end
 
-    def execute(root, state_dir, status_path, workers, output, verify, trace, trace_path, index, includes)
+    def execute(root, state_dir, status_path, workers, output, verify, trace, trace_path, index, includes, trace_forks)
       started = Telemetry.now
       state = { "schema" => STATUS_SCHEMA, "version" => STATUS_VERSION, "outcome" => "running",
                 "requested_workers" => workers, "actual_workers" => 0, "exit_code" => nil,
@@ -94,6 +96,8 @@ module Cleave
             count = [workers, files.length].min
             files.each_with_index.each_with_object(Array.new(count) { [] }) { |(path, id), groups| groups[id % count] << path }
           end
+          fork_directory = File.join(temp, "forks")
+          Dir.mkdir(fork_directory, 0o700) if trace_forks
           state["actual_workers"] = groups.length
           worker_started = Telemetry.now
           jobs = groups.each_with_index.map do |group, i|
@@ -110,7 +114,8 @@ module Cleave
             # starts with a directory (e.g. spec/**/*_spec.rb). A **-prefixed
             # pattern disables that expansion; the discovered files remain authoritative.
             command += ["--pattern", "**/*", "--", *group] if group
-            environment = trace ? { "CLEAVE_TRACE_ROOT" => root, "CLEAVE_TRACE_OUTPUT" => File.join(temp, "trace.json") } : {}
+            environment = trace ? { "CLEAVE_TRACE_ROOT" => root, "CLEAVE_TRACE_OUTPUT" => File.join(temp, "trace.json"),
+                                    "CLEAVE_TRACE_FORK_DIRECTORY" => (trace_forks ? fork_directory : nil) } : {}
             [spawn_job(root, command, log, children, environment), json, log, group]
           end
           # Processes have already started concurrently; wait only for our own children.
@@ -139,8 +144,10 @@ module Cleave
             begin
               raise ArtifactError, "RSpec reports were incomplete" unless state["reports_complete"]
               report = TraceCapture.collect(File.join(temp, "trace.json"), root: root, pid: jobs.first[0])
+              report, fork_count = TraceCapture.merge_forks(report, fork_directory, root: root) if trace_forks
               write_state(trace_path, TraceCapture.recorded(report))
               state["trace"] = { "status" => "recorded", "complete" => false, "event_count" => report.events.length }
+              state["trace"]["fork_reports"] = fork_count if trace_forks
             rescue StandardError => error
               write_state(trace_path, TraceCapture.incomplete("incomplete"))
               state["trace"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
