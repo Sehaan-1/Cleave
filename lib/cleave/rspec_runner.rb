@@ -7,6 +7,7 @@ require "tmpdir"
 require "tempfile"
 require "set"
 require_relative "artifacts"
+require_relative "shadow_verification"
 
 module Cleave
   class RunnerError < StandardError; end
@@ -18,8 +19,10 @@ module Cleave
     STATUS_VERSION = 1
     MAX_WORKERS = 32
 
-    def run(root:, workers: 1, output: $stdout)
+    def run(root:, workers: 1, output: $stdout, verify: false)
       raise ArgumentError, "workers must be an integer from 1 to #{MAX_WORKERS}" unless workers.is_a?(Integer) && workers.between?(1, MAX_WORKERS)
+      raise ArgumentError, "verify must be true or false" unless [true, false].include?(verify)
+      raise ArgumentError, "verification requires one worker" if verify && workers != 1
       root = File.realpath(root)
       raise ArgumentError, "not a directory: #{root}" unless File.directory?(root)
       raise RunnerError, "project Gemfile not found in #{root}" unless File.file?(File.join(root, "Gemfile"))
@@ -32,21 +35,31 @@ module Cleave
       raise RunnerError, "runner files must not be symlinks" if File.symlink?(lock_path) || File.symlink?(status_path)
       File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
         raise RunnerError, "another Cleave run is active" unless lock.flock(File::LOCK_EX | File::LOCK_NB)
-        execute(root, state_dir, status_path, workers, output)
+        execute(root, state_dir, status_path, workers, output, verify)
       ensure
         lock.flock(File::LOCK_UN) if lock
       end
     end
 
-    def execute(root, state_dir, status_path, workers, output)
+    def execute(root, state_dir, status_path, workers, output, verify)
       state = { "schema" => STATUS_SCHEMA, "version" => STATUS_VERSION, "outcome" => "running",
                 "requested_workers" => workers, "actual_workers" => 0, "exit_code" => nil,
                 "observed_failed_specs" => [], "reports_complete" => false, "suite_coverage_verified" => false,
                 "example_count" => 0, "errors" => [] }
+      state["verification"] = { "status" => "running" } if verify
       write_state(status_path, state)
       children = []
       begin
         Dir.mktmpdir("rspec-run-", state_dir) do |temp|
+          verification_files = current = plan = nil
+          if verify
+            begin
+              verification_files = discover(root, temp, output, children)
+              current, plan = ShadowVerification.prepare(root: root, files: verification_files)
+            rescue StandardError => error
+              state["verification"] = { "status" => "incomplete", "errors" => ["#{error.class}: #{error.message}"] }
+            end
+          end
           files = workers > 1 ? discover(root, temp, output, children) : nil
           before = files && Inventory.capture(root: root, paths: files)
           raise RunnerError, "Discovered spec files are missing." if files && before.files.keys != files
@@ -82,7 +95,11 @@ module Cleave
           state["errors"] << "No RSpec examples were reported." if state["example_count"] == 0
           state["observed_failed_specs"] = state["observed_failed_specs"].uniq.sort
           state["reports_complete"] = state["errors"].empty?
-          state["outcome"] = if !state["reports_complete"]
+          if verify && plan
+            state["verification"] = ShadowVerification.finish(root: root, files: verification_files,
+                                                               current: current, plan: plan, state: state)
+          end
+          state["outcome"] = if !state["reports_complete"] || (verify && state["verification"]["status"] == "incomplete")
             "incomplete"
           elsif state["observed_failed_specs"].empty?
             "passed"
@@ -93,6 +110,7 @@ module Cleave
         end
       rescue Interrupt
         terminate(children)
+        state["verification"] = { "status" => "incomplete", "errors" => ["Run interrupted."] } if verify
         state["outcome"] = "incomplete"
         state["exit_code"] = 130
         state["errors"] << "Run interrupted."
@@ -100,6 +118,7 @@ module Cleave
         raise
       rescue StandardError => error
         terminate(children)
+        state["verification"] = { "status" => "incomplete", "errors" => ["#{error.class}: #{error.message}"] } if verify
         state["outcome"] = "incomplete"
         state["exit_code"] = 1
         state["errors"] << "#{error.class}: #{error.message}"

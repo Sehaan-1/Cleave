@@ -8,7 +8,8 @@ The Ruby engine is built in independently reviewable slices. This sequence suppl
 4. **Selection**: compare inventories and OR bitmaps with explicit safety behavior and attribution. The preview measures its actual OR time, but v1 indexes require full-suite fallback; no execution adapter or latency guarantee is provided.
 5a. **Guardrail planning**: apply Prism hazards, caller-supplied prior failures and root fallback to the diagnostic union; abort on stale or invalid spec source. v1 indexes still require the full suite and cannot authorize execution.
 6. **RSpec execution**: run the configured suite serially by default or explicitly partition RSpec-discovered files into isolated parallel workers; persist observed outcomes and propagate failures. Full-suite fallback is mandatory, and configured-suite coverage is not verified.
-7. **Audit/telemetry and graph**: real shadow verification, honest counts/timings, and an HTML export. Verify against a real Ruby project before claiming a false-negative rate.
+7a. **Shadow verification**: compare a diagnostic guardrailed candidate with failures observed in one configured full-suite run; never authorize skipping.
+7b. **Telemetry and graph**: honest counts/timings and an HTML export remain future work. Verify against real projects before claiming any false-negative rate.
 8. **Workbench integration**: adapt the actual versioned artifacts to the UI and package local CLI assets once the emitter exists.
 
 Exact boundaries and ordering may change as implementation constraints are discovered. A static AST is not evidence that a skipped test is safe.
