@@ -18,3 +18,5 @@ require_relative "cleave/shadow_verification"
 require_relative "cleave/telemetry"
 
 require_relative "cleave/graph_export"
+
+require_relative "cleave/diagnostic_plan"
