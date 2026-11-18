@@ -17,7 +17,7 @@ module Cleave
       "Baseline artifacts can be stale or from another run; matching fingerprints do not establish provenance."
     ].freeze
 
-    def build(root:, includes: [], output: $stderr)
+    def build(root:, includes: [], output: $stderr, expected_artifacts: nil)
       root = File.realpath(root)
       raise ArgumentError, "not a directory: #{root}" unless File.directory?(root)
       raise RunnerError, "project Gemfile not found in #{root}" unless File.file?(File.join(root, "Gemfile"))
@@ -33,8 +33,13 @@ module Cleave
       raise ArtifactError, "runner lock must not be a symlink" if File.symlink?(lock_path)
       File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
         raise RunnerError, "another Cleave run or plan is active" unless lock.flock(File::LOCK_EX | File::LOCK_NB)
-        inventory = Inventory.load(read_artifact(File.join(state, "inventory.json")))
-        index = BitmapIndex.load(read_artifact(File.join(state, "bitmap_index.json")), inventory: inventory)
+        inventory_text = read_artifact(File.join(state, "inventory.json"))
+        index_text = read_artifact(File.join(state, "bitmap_index.json"))
+        if expected_artifacts && expected_artifacts != [Digest::SHA256.hexdigest(inventory_text), Digest::SHA256.hexdigest(index_text)]
+          raise ArtifactError, "artifact pair changed before planning; restart the workbench"
+        end
+        inventory = Inventory.load(inventory_text)
+        index = BitmapIndex.load(index_text, inventory: inventory)
         raise ArtifactError, "baseline inventory must not include .cleave state" if inventory.files.keys.any? { |path| internal?(path) }
         extras = inventory.files.keys + includes
         before = ShadowVerification.capture(root, extras)
