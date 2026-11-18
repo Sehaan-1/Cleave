@@ -22,7 +22,7 @@ const shortTitles = [
   "New migration",
   "Root preload",
 ];
-export function CommandBar() {
+export function CommandBar({ onOpenArtifacts }: { onOpenArtifacts: () => void }) {
   const scenario = useWorkbench((s) => s.selection.scenario);
   const preset = useWorkbench((s) => s.preset);
   return (
@@ -36,6 +36,7 @@ export function CommandBar() {
         WORKBENCH
       </div>
       <div className="command-spacer" />
+      <button className="artifact-open" type="button" onClick={onOpenArtifacts}>Import artifacts</button>
       <nav className="preset-nav" aria-label="Commit scenarios">
         <span className="eyebrow">Commit scenario</span>
         <div className="preset-buttons">
