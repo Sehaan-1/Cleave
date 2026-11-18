@@ -105,8 +105,9 @@ module Cleave
           mask ^= lowest
         end
       end
-      roots = changed & index.root_paths
-      unmapped = changed.reject { |path| index.masks.key?(path) || index.root_paths.include?(path) }
+      root_paths = index.root_paths.to_set
+      roots = changed.select { |path| root_paths.include?(path) }
+      unmapped = changed.reject { |path| index.masks.key?(path) || root_paths.include?(path) }
       fallbacks = ["incomplete_index"]
       fallbacks << "root_scope_changed" unless roots.empty?
       fallbacks << "spec_universe_changed" unless specs == index.specs
