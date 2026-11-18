@@ -198,6 +198,15 @@ module Cleave
     end
     private_class_method :execute
 
+    # Discovery loads configured spec files in a separate dry-run process. It
+    # does not prove the suite is complete and may have top-level side effects.
+    def discover_files(root:, temp:, output: $stderr)
+      children = []
+      discover(root, temp, output, children)
+    ensure
+      terminate(children) if children
+    end
+
     def discover(root, temp, output, children)
       json = File.join(temp, "manifest.json")
       log = File.join(temp, "discovery.log")

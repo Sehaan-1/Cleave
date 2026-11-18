@@ -181,6 +181,21 @@ If the snapshots differ, a report is incomplete, an output target is a symlink, 
 
 These snapshots are not transactional: they cannot detect changes reverted during a run, unlisted ignored files, external dependencies, or excluded examples. A failure inside an example can still yield an index, but the run remains failed. The pair is **always incomplete and cannot authorize test skipping**. The main workbench remains simulator-driven; the separate artifact inspector and graph can display this pair. No historical trace is silently reused, and no automatic static dependency resolution or selective execution occurs.
 
+## Preview a real project plan
+
+After generating a baseline pair with `bundle exec cleave run --trace --index`, run from the Git project root:
+
+```sh
+bundle exec cleave plan
+bundle exec cleave plan --include ignored/current_spec.rb > plan.json
+```
+
+The command emits a versioned `cleave.diagnostic_plan` JSON object to standard output. It compares the baseline with a current inventory, discovers configured RSpec files in a **separate dry-run process**, and applies the existing bitmap, changed/new-spec, Prism-hazard and root-scope guardrails. The JSON includes changes, discovered and diagnostic candidate paths, per-spec reasons, hazard locations, fallback reasons and measured bitmap OR time. Previous failures are explicitly unavailable. It does not run test examples or modify the last-run record, and uses the runner lock to avoid racing another Cleave run or plan. Discovery loads spec files and may have top-level side effects. Selector characters (`[`, `]`, `:`) in discovered paths are currently unsupported.
+
+Git tracked/non-ignored files, baseline paths and repeatable explicit `--include` paths are captured before and after discovery and planning. Include ignored new specs or dependencies explicitly; missing or symlinked includes, invalid artifacts, empty or failed discovery, and detected changes abort with a nonzero status and no JSON plan. These checks are not transactional and cannot detect reverted changes, unlisted ignored files or external dependencies. The baseline pair may itself be stale; check the latest indexing run before relying on it as an observation. Matching fingerprints are not provenance. The discovered list is not proof of suite coverage.
+
+**The candidate is only a diagnostic preview**, not a runnable test list: `requires_full_suite` is true and `execution_ready` is false. Continue running the configured full suite. This JSON is not yet connected to the workbench; the simulator and artifact inspector remain separate.
+
 ## Guardrail planning
 
 `Cleave::Guardrails.plan` combines the selection preview with Prism hazards and caller-supplied previous failures. It re-reads every supplied current Ruby spec, verifies its SHA-256 against the current inventory, and parses those exact bytes. A stale, missing, symlinked, non-Ruby, unreadable or invalid spec aborts the plan rather than being treated as hazard-free.
