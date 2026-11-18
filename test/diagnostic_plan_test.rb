@@ -24,6 +24,7 @@ class DiagnosticPlanTest < Minitest::Test
     write(".rspec", "--require ./spec/spec_helper.rb\n")
     write("spec/a_spec.rb", "RSpec.describe('a') { it('reads') { File.read('a.json') } }\n")
     write("spec/b_spec.rb", "RSpec.describe('b') { it('hazard') { Dir.glob('*.json') } }\n")
+    write("spec/d_spec.rb", "RSpec.describe('d') { it('passes') {} }\n")
     output = StringIO.new
     result = Cleave::RSpecRunner.run(root: @root, trace: true, index: true, output: output)
     assert_equal "passed", result["outcome"], "#{result.inspect}\n#{output.string}"
@@ -54,16 +55,18 @@ class DiagnosticPlanTest < Minitest::Test
     assert_equal true, plan["requires_full_suite"]
     assert_equal false, plan["execution_ready"]
     assert_equal false, plan["suite_coverage_verified"]
-    assert_equal %w[spec/a_spec.rb spec/b_spec.rb spec/c_spec.rb], plan["discovered_specs"]
-    assert_equal plan["discovered_specs"], plan["candidate_specs"]
+    assert_equal %w[spec/a_spec.rb spec/b_spec.rb spec/c_spec.rb spec/d_spec.rb], plan["discovered_specs"]
+    assert_equal %w[spec/a_spec.rb spec/b_spec.rb spec/c_spec.rb], plan["candidate_specs"]
     assert_includes plan.dig("changes", "modified"), "a.json"
     assert_includes plan.dig("changes", "added"), "new.txt"
     assert_includes plan["unmapped_changes"], "new.txt"
-    a, b, c = plan.fetch("decisions")
+    a, b, c, d = plan.fetch("decisions")
     assert_includes a.fetch("bitmap_sources"), "a.json"
     assert_includes a.fetch("reasons"), "bitmap_hit"
     assert_includes b.fetch("reasons"), "prism_hazard"
     assert b.fetch("hazards").any? { |hazard| hazard["name"].include?("glob") && hazard["line"].is_a?(Integer) }
+    refute d.fetch("candidate")
+    assert_includes d.fetch("reasons"), "incomplete_index_fallback"
     assert c.fetch("unindexed_spec")
     assert_includes c.fetch("reasons"), "unindexed_spec"
     assert_includes plan["fallback_reasons"], "incomplete_index"
