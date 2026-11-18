@@ -15,7 +15,7 @@ module Cleave
   end
 
   class Fact < T::Struct
-    # `kind` is definition, reference, require_relative, or hazard.
+    # `kind` is definition, reference, require_relative, runtime_load, or hazard.
     const :kind, Symbol
     const :value, String
     const :node_type, String
@@ -117,6 +117,9 @@ module Cleave
         add(:hazard, node.name.to_s, node)
       end
       args = node.arguments&.arguments
+      if (%i[require load].include?(node.name) && (receiver.nil? || receiver == "Kernel" || receiver == "::Kernel")) || node.name == :autoload
+        add(:runtime_load, node.name.to_s, node)
+      end
       if node.name == :require_relative && (receiver.nil? || receiver == "Kernel" || receiver == "::Kernel")
         if args && args.length == 1 && args.first.is_a?(Prism::StringNode)
           add(:require_relative, args.first.unescaped, node)

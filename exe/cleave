@@ -11,7 +11,7 @@ trace_forks = false
 index = false
 includes = []
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify | --trace [--index [--include PATH]]]\n       bundle exec cleave provenance\n       bundle exec cleave plan [--include PATH] [--previous-failures]\n       bundle exec cleave graph --output FILE.html\n       bundle exec cleave ui [--port N] [--no-open] [--plan [--include PATH] [--previous-failures]]"
+  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify | --trace [--index [--include PATH]]]\n       bundle exec cleave provenance\n       bundle exec cleave plan [--include PATH] [--previous-failures] [--static-dependencies]\n       bundle exec cleave graph --output FILE.html\n       bundle exec cleave ui [--port N] [--no-open] [--plan [--include PATH] [--previous-failures] [--static-dependencies]]"
   opts.on("--workers N", Integer, "Run the configured full suite in N file workers (default: 1)") { |value| workers = value }
   opts.on("--index", "Build diagnostic artifacts from this traced run (requires --trace)") { index = true }
   opts.on("--include PATH", "Include an ignored file in the inventory (repeatable; requires --index)") { |value| includes << value }
@@ -28,10 +28,12 @@ begin
     ui_plan = false
     ui_includes = []
     ui_previous_failures = false
+    ui_static_dependencies = false
     ui_parser = OptionParser.new do |opts|
-      opts.banner = "Usage: bundle exec cleave ui [--port N] [--no-open] [--plan [--include PATH] [--previous-failures]]"
+      opts.banner = "Usage: bundle exec cleave ui [--port N] [--no-open] [--plan [--include PATH] [--previous-failures] [--static-dependencies]]"
       opts.on("--port N", Integer, "Loopback port (default: an available port)") { |value| port = value }
       opts.on("--no-open", "Print the URL without launching a browser") { open_browser = false }
+      opts.on("--static-dependencies", "Include approximate static dependencies (requires --plan)") { ui_static_dependencies = true }
       opts.on("--previous-failures", "Include observations from the latest completed run (requires --plan)") { ui_previous_failures = true }
       opts.on("--plan", "Compute a diagnostic startup plan (loads specs in RSpec dry-run)") { ui_plan = true }
       opts.on("--include PATH", "Include an ignored current file (requires --plan; repeatable)") { |value| ui_includes << value }
@@ -41,7 +43,7 @@ begin
     raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
     require "cleave/ui_server"
     warn "Cleave: computing diagnostic plan; RSpec dry-run loads spec files and may have side effects." if ui_plan
-    server = Cleave::UIServer.new(root: Dir.pwd, port: port, plan: ui_plan, includes: ui_includes, previous_failures: ui_previous_failures)
+    server = Cleave::UIServer.new(root: Dir.pwd, port: port, plan: ui_plan, includes: ui_includes, previous_failures: ui_previous_failures, static_dependencies: ui_static_dependencies)
     puts "Cleave workbench: #{server.url}"
     puts "Loopback only; artifact snapshot is incomplete. Press Ctrl-C to stop."
     $stdout.flush
@@ -65,15 +67,17 @@ begin
     ARGV.shift
     plan_includes = []
     plan_previous_failures = false
+    plan_static_dependencies = false
     plan_parser = OptionParser.new do |opts|
-      opts.banner = "Usage: bundle exec cleave plan [--include PATH] [--previous-failures]"
+      opts.banner = "Usage: bundle exec cleave plan [--include PATH] [--previous-failures] [--static-dependencies]"
+      opts.on("--static-dependencies", "Include approximate static dependencies") { plan_static_dependencies = true }
       opts.on("--previous-failures", "Include observations from the latest completed run") { plan_previous_failures = true }
       opts.on("--include PATH", "Include an ignored current file (repeatable)") { |value| plan_includes << value }
       opts.on("-h", "--help", "Show help") { puts opts; exit 0 }
     end
     plan_parser.parse!(ARGV)
     raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
-    plan = Cleave::DiagnosticPlan.build(root: Dir.pwd, includes: plan_includes, output: $stderr, previous_failures: plan_previous_failures)
+    plan = Cleave::DiagnosticPlan.build(root: Dir.pwd, includes: plan_includes, output: $stderr, previous_failures: plan_previous_failures, static_dependencies: plan_static_dependencies)
     puts JSON.pretty_generate(plan)
     exit 0
   end

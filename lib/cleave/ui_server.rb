@@ -17,11 +17,12 @@ module Cleave
 
     attr_reader :url, :port
 
-    def initialize(root:, port: 0, plan: false, includes: [], previous_failures: false, output: $stderr)
+    def initialize(root:, port: 0, plan: false, includes: [], previous_failures: false, static_dependencies: false, output: $stderr)
       raise ArgumentError, "port must be an integer from 0 to 65535" unless port.is_a?(Integer) && port.between?(0, 65_535)
       raise ArgumentError, "plan must be true or false" unless [true, false].include?(plan)
       raise ArgumentError, "includes require a plan" unless includes.is_a?(Array) && (plan || includes.empty?)
       raise ArgumentError, "previous failures require a plan" unless [true, false].include?(previous_failures) && (plan || !previous_failures)
+      raise ArgumentError, "static dependencies require a plan" unless [true, false].include?(static_dependencies) && (plan || !static_dependencies)
       root = File.realpath(root)
       state = File.join(root, ".cleave")
       raise ArtifactError, ".cleave must be a real directory, not a symlink" if File.symlink?(state) || !File.directory?(state)
@@ -32,7 +33,7 @@ module Cleave
       plan_text = nil
       if plan
         expected = [Digest::SHA256.hexdigest(inventory_text), Digest::SHA256.hexdigest(index_text)]
-        plan_text = JSON.generate(DiagnosticPlan.build(root: root, includes: includes, output: output, expected_artifacts: expected, previous_failures: previous_failures))
+        plan_text = JSON.generate(DiagnosticPlan.build(root: root, includes: includes, output: output, expected_artifacts: expected, previous_failures: previous_failures, static_dependencies: static_dependencies))
         raise ArtifactError, "diagnostic plan exceeds 10 MiB" if plan_text.bytesize > MAX_ARTIFACT_BYTES
         plan_text.freeze
       end

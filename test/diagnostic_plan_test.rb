@@ -77,6 +77,45 @@ class DiagnosticPlanTest < Minitest::Test
     assert_operator plan["union_nanoseconds"], :>=, 0
   end
 
+  def test_static_dependencies_add_unobserved_edges_to_cli_and_ui_plan
+    write("app/dependency.rb", "class Dependency; end\n")
+    write("spec/d_spec.rb", "RSpec.describe('d') { it('passes') { require_relative '../app/dependency' if false } }\n")
+    generated = Cleave::RSpecRunner.run(root: @root, trace: true, index: true, output: StringIO.new)
+    assert_equal "passed", generated["outcome"], generated.inspect
+    write("app/dependency.rb", "class Dependency; end\n# changed\n")
+    default = build
+    refute_includes default["candidate_specs"], "spec/d_spec.rb"
+    plan = build(static_dependencies: true, previous_failures: true)
+    assert_equal 3, plan["version"]
+    assert plan["previous_failures_available"]
+    refute plan["static_deleted_fallback"]
+    decision = plan["decisions"].find { |item| item["spec"] == "spec/d_spec.rb" }
+    assert_includes decision["static_sources"], "app/dependency.rb"
+    assert_includes decision["reasons"], "static_dependency"
+    assert_includes decision["static_uncertainties"], "unresolved_constant" # RSpec is external
+    assert_includes plan["fallback_reasons"], "static_uncertainty"
+    assert plan["requires_full_suite"]
+    refute plan["execution_ready"]
+    stdout, stderr, status = Open3.capture3(@env, "bundle", "exec", "cleave", "plan", "--static-dependencies", chdir: @root)
+    assert status.success?, stderr
+    from_cli = JSON.parse(stdout)
+    assert_equal 3, from_cli["version"]
+    assert_nil from_cli["previous_failures_source_sha256"]
+    refute from_cli["previous_failures_available"]
+    assert_includes from_cli["decisions"].find { |item| item["spec"] == "spec/d_spec.rb" }["static_sources"], "app/dependency.rb"
+    server = Cleave::UIServer.new(root: @root, plan: true, static_dependencies: true, output: StringIO.new)
+    thread = Thread.new { server.start }
+    begin
+      uri = URI(server.url)
+      response = Net::HTTP.new(uri.host, uri.port, nil).get(uri.path + "artifacts/plan.json")
+      assert_equal 3, JSON.parse(response.body)["version"]
+    ensure
+      server.shutdown
+      thread.join(5)
+    end
+    assert_raises(ArgumentError) { Cleave::UIServer.new(root: @root, static_dependencies: true) }
+  end
+
   def test_previous_failures_are_opt_in_and_use_latest_consistent_run
     original = File.read(File.join(@root, "spec/d_spec.rb"))
     write("spec/d_spec.rb", "RSpec.describe('d') { it('fails') { expect(1).to eq(2) } }\n")

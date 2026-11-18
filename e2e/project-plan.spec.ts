@@ -48,6 +48,23 @@ test('previous failures appear as diagnostic attribution and unmatched paths', a
   await expect(page.getByText('Candidate specs are not an execution list.')).toBeVisible();
 });
 
+test('static dependency paths and uncertainty are visible in project plan', async ({ page }) => {
+  const data = JSON.parse(plan); data.version = 3;
+  data.previous_failures_source_sha256 = null; data.unmatched_previous_failures = []; data.static_deleted_fallback = false;
+  for (const item of data.decisions) { item.static_sources = []; item.static_uncertainties = []; }
+  data.decisions[2].candidate = true; data.decisions[2].static_sources = ['app/服务.rb'];
+  data.decisions[2].static_uncertainties = ['unresolved_require_relative'];
+  data.decisions[2].reasons.push('static_dependency', 'static_uncertainty');
+  data.fallback_reasons.push('static_uncertainty'); data.candidate_specs.push('spec/gamma_spec.rb');
+  await mockPlan(page, JSON.stringify(data)); await page.goto('/');
+  await page.getByRole('button', { name: /app\/服务.rb/ }).click();
+  await expect(page.getByText('3 shown')).toBeVisible();
+  await page.getByRole('button', { name: /spec\/gamma_spec.rb/ }).click();
+  await expect(page.getByText('Static dependency', { exact: true })).toBeVisible();
+  await expect(page.getByText('Unresolved require_relative', { exact: true })).toBeVisible();
+  await expect(page.getByText('Syntactic links are approximate; they do not establish coverage.')).toBeVisible();
+});
+
 test('rejects invalid plan rather than showing fabricated results', async ({ page }) => {
   const invalid = JSON.parse(plan); invalid.execution_ready = true;
   await mockPlan(page, JSON.stringify(invalid)); await page.goto('/');
@@ -91,7 +108,7 @@ test('real loopback UI renders a freshly generated Ruby plan', async ({ page }) 
     run('bundle', ['lock', '--local']);
     run('bundle', ['exec', 'cleave', 'run', '--trace', '--index']);
     writeFileSync(join(project, 'data.json'), '{"changed":true}');
-    child = spawn('bundle', ['exec', 'cleave', 'ui', '--plan', '--previous-failures', '--no-open'], { cwd: project, stdio: ['ignore', 'pipe', 'pipe'], env });
+    child = spawn('bundle', ['exec', 'cleave', 'ui', '--plan', '--previous-failures', '--static-dependencies', '--no-open'], { cwd: project, stdio: ['ignore', 'pipe', 'pipe'], env });
     const proc = child;
     const url = await new Promise<string>((resolveUrl, reject) => {
       let output = '';
@@ -109,6 +126,7 @@ test('real loopback UI renders a freshly generated Ruby plan', async ({ page }) 
     await expect(page.getByRole('button', { name: /spec\/real_spec.rb/ })).toBeVisible();
     await expect(page.getByText('Observed dependency')).toBeVisible();
     await expect(page.getByText('Latest run observations · unsigned, coverage unverified.')).toBeVisible();
+    await expect(page.getByText('Unresolved constant reference', { exact: true })).toBeVisible();
     await expect(page.getByText('Candidate specs are not an execution list.')).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
