@@ -54,6 +54,16 @@ module Cleave
         end
       end
 
+      # After fork, only one thread survives; inherited mutexes may have been
+      # locked by vanished threads. Do not restart a stopped tracing session.
+      def reset_after_fork(trace)
+        @lifecycle_lock = Mutex.new
+        return false unless @active.equal?(trace)
+        trace.reset_after_fork!
+        Thread.current[GUARD_KEY] = nil
+        true
+      end
+
       def stop(trace)
         @lifecycle_lock.synchronize do
           raise "trace is not active" unless @active.equal?(trace)
@@ -101,6 +111,16 @@ module Cleave
         stack.pop
         Thread.current[SCOPE_KEY] = nil if stack.empty?
       end
+    end
+
+    # Called only in a fork child before it resumes application code. Parent
+    # event sets must not be re-emitted as child observations. Recreate the
+    # mutex rather than inheriting a potentially locked one from another thread.
+    def reset_after_fork!
+      @owner_pid = Process.pid
+      @mutex = Mutex.new
+      @events = Set.new
+      @limitations = Set.new(LIMITATIONS)
     end
 
     def report
