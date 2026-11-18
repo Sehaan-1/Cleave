@@ -97,7 +97,7 @@ begin
 rescue Interrupt
   warn "Cleave: interrupted"
   exit 130
-rescue OptionParser::ParseError, ArgumentError, Cleave::RunnerError, Cleave::ArtifactError, SystemCallError => error
+rescue OptionParser::ParseError, ArgumentError, Cleave::RunnerError, Cleave::ArtifactError, Cleave::ParseError, SystemCallError => error
   warn "Cleave: #{error.message}"
   exit 2
 end
