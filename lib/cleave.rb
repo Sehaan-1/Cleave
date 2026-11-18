@@ -12,3 +12,5 @@ require_relative "cleave/selection"
 require_relative "cleave/guardrails"
 
 require_relative "cleave/rspec_runner"
+
+require_relative "cleave/shadow_verification"
