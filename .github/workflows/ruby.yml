@@ -1,4 +1,4 @@
-name: Ruby static analysis
+name: Ruby tests
 on:
   push:
   pull_request:
@@ -14,4 +14,4 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-      - run: bundle exec ruby -Ilib test/static_analysis_test.rb
+      - run: bundle exec ruby -Ilib -e 'Dir["test/*_test.rb"].sort.each { |file| require_relative file }'
