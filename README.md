@@ -80,7 +80,7 @@ The static pass by itself does **not** resolve the transitive constant graph, tr
 
 ## Scoped Ruby access tracing
 
-This slice adds an opt-in, process-local observation API; it is **not** yet wired to RSpec or safe execution. Reports can be fed to the incomplete artifact index below:
+This slice adds an opt-in, process-local observation API. A serial RSpec tracing adapter is also available below; neither form permits safe selective execution. Reports can be fed to the incomplete artifact index below:
 
 ```ruby
 require "cleave"
@@ -101,6 +101,24 @@ The recorder observes Ruby-level `File.open`, `IO.read` / `IO.binread` (includin
 Hooks are installed process-wide once and are dormant after `stop`. Only one session may be active per process. Scope stacks are **fiber-local**: new threads and fibers default to root until explicitly wrapped with `with_spec`. A fork receives a copy of the session; the parent does not receive child events automatically. Collect the child's `report.to_h` over IPC before it exits and retain it separately with the parent's report. The report includes its PID. Traces must be captured over the entire intended boot and test run; loading Cleave itself occurs before capture starts.
 
 **Safety:** `complete` is always false. Ruby-level hooks cannot see native extensions, direct syscalls, subprocesses, all IO APIs, directory probes, or `require_relative` reliably. Unscoped concurrent work and uncollected children are also incomplete. A failed `require` is not recorded as a file dependency. A trace must never be used alone to skip tests. Later slices must define conservative fallback, process aggregation, schema and runner integration before any selection is safe.
+
+## Trace a configured RSpec run
+
+From a project with Cleave and RSpec installed:
+
+```sh
+bundle exec cleave run --trace
+```
+
+This executes the **configured full suite** in one RSpec process, starts the process-local trace before RSpec/spec loading, and wraps same-fiber examples in their spec-path scopes. File loading, suite/context hooks, outer hooks and unscoped threads/fibers are attributed to root; operation coverage is still incomplete. A versioned `.cleave/last_trace.json` records the observed events and limitations, with `complete: false`. It is atomically marked running before execution and incomplete after errors or interruption, so a failed capture cannot silently reuse a prior report. The normal run status reports whether a capture was recorded; failing specs still fail the command.
+
+```ruby
+report = Cleave::TraceCapture.read(".cleave/last_trace.json", root: Dir.pwd)
+# A report can be passed to BitmapIndex.build once the caller has separately
+# captured an inventory and independently established the spec universe.
+```
+
+This is not automatic artifact/index generation. It does not prove suite discovery, child-process coverage, all filesystem operations, or absence of false negatives. `.cleave/` and project `.git/` operations are excluded from the trace. The trace is not bound to a content inventory and can become stale; a non-traced run does not replace the last traced run. Only the parent process report is collected; forked children cannot replace it. Trace reports are diagnostic and **must never be used to skip tests**. `--trace` currently requires one worker and cannot be combined with `--verify`.
 
 ## Inventory and bitmap artifacts
 

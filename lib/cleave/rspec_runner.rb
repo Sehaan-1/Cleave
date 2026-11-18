@@ -9,6 +9,7 @@ require "set"
 require_relative "artifacts"
 require_relative "shadow_verification"
 require_relative "telemetry"
+require_relative "trace_capture"
 
 module Cleave
   class RunnerError < StandardError; end
@@ -20,10 +21,13 @@ module Cleave
     STATUS_VERSION = 1
     MAX_WORKERS = 32
 
-    def run(root:, workers: 1, output: $stdout, verify: false)
+    def run(root:, workers: 1, output: $stdout, verify: false, trace: false)
       raise ArgumentError, "workers must be an integer from 1 to #{MAX_WORKERS}" unless workers.is_a?(Integer) && workers.between?(1, MAX_WORKERS)
       raise ArgumentError, "verify must be true or false" unless [true, false].include?(verify)
       raise ArgumentError, "verification requires one worker" if verify && workers != 1
+      raise ArgumentError, "trace must be true or false" unless [true, false].include?(trace)
+      raise ArgumentError, "tracing requires one worker" if trace && workers != 1
+      raise ArgumentError, "tracing and verification must be separate runs" if trace && verify
       root = File.realpath(root)
       raise ArgumentError, "not a directory: #{root}" unless File.directory?(root)
       raise RunnerError, "project Gemfile not found in #{root}" unless File.file?(File.join(root, "Gemfile"))
@@ -33,22 +37,25 @@ module Cleave
       raise RunnerError, ".cleave must not be a symlink" if File.symlink?(state_dir)
       lock_path = File.join(state_dir, "runner.lock")
       status_path = File.join(state_dir, "last_run.json")
-      raise RunnerError, "runner files must not be symlinks" if File.symlink?(lock_path) || File.symlink?(status_path)
+      trace_path = File.join(state_dir, "last_trace.json")
+      raise RunnerError, "runner files must not be symlinks" if File.symlink?(lock_path) || File.symlink?(status_path) || (trace && File.symlink?(trace_path))
       File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
         raise RunnerError, "another Cleave run is active" unless lock.flock(File::LOCK_EX | File::LOCK_NB)
-        execute(root, state_dir, status_path, workers, output, verify)
+        execute(root, state_dir, status_path, workers, output, verify, trace, trace_path)
       ensure
         lock.flock(File::LOCK_UN) if lock
       end
     end
 
-    def execute(root, state_dir, status_path, workers, output, verify)
+    def execute(root, state_dir, status_path, workers, output, verify, trace, trace_path)
       started = Telemetry.now
       state = { "schema" => STATUS_SCHEMA, "version" => STATUS_VERSION, "outcome" => "running",
                 "requested_workers" => workers, "actual_workers" => 0, "exit_code" => nil,
                 "observed_failed_specs" => [], "reports_complete" => false, "suite_coverage_verified" => false,
                 "example_count" => 0, "errors" => [], "telemetry" => Telemetry.initial }
       state["verification"] = { "status" => "running" } if verify
+      state["trace"] = { "status" => "running", "complete" => false } if trace
+      write_state(trace_path, TraceCapture.incomplete("running")) if trace
       write_state(status_path, state)
       children = []
       begin
@@ -78,12 +85,19 @@ module Cleave
           jobs = groups.each_with_index.map do |group, i|
             json = File.join(temp, "worker-#{i}.json")
             log = File.join(temp, "worker-#{i}.log")
-            command = ["bundle", "exec", "rspec", "--format", "progress", "--format", "json", "--out", json]
+            command = if trace
+              boot = File.expand_path("rspec_trace_boot.rb", __dir__)
+              hooks = File.expand_path("rspec_trace_hooks.rb", __dir__)
+              ["bundle", "exec", Gem.ruby, "-r", boot, "-S", "rspec", "--require", hooks, "--format", "progress", "--format", "json", "--out", json]
+            else
+              ["bundle", "exec", "rspec", "--format", "progress", "--format", "json", "--out", json]
+            end
             # RSpec can append cwd to explicit paths when a configured pattern
             # starts with a directory (e.g. spec/**/*_spec.rb). A **-prefixed
             # pattern disables that expansion; the discovered files remain authoritative.
             command += ["--pattern", "**/*", "--", *group] if group
-            [spawn_job(root, command, log, children), json, log, group]
+            environment = trace ? { "CLEAVE_TRACE_ROOT" => root, "CLEAVE_TRACE_OUTPUT" => File.join(temp, "trace.json") } : {}
+            [spawn_job(root, command, log, children, environment), json, log, group]
           end
           # Processes have already started concurrently; wait only for our own children.
           seen_examples = Set.new
@@ -106,7 +120,18 @@ module Cleave
             state["verification"] = ShadowVerification.finish(root: root, files: verification_files,
                                                                current: current, plan: plan, state: state, observed_specs: seen_specs.to_a)
           end
-          state["outcome"] = if !state["reports_complete"] || (verify && state["verification"]["status"] == "incomplete")
+          if trace
+            begin
+              raise ArtifactError, "RSpec reports were incomplete" unless state["reports_complete"]
+              report = TraceCapture.collect(File.join(temp, "trace.json"), root: root, pid: jobs.first[0])
+              write_state(trace_path, TraceCapture.recorded(report))
+              state["trace"] = { "status" => "recorded", "complete" => false, "event_count" => report.events.length }
+            rescue StandardError => error
+              write_state(trace_path, TraceCapture.incomplete("incomplete"))
+              state["trace"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
+            end
+          end
+          state["outcome"] = if !state["reports_complete"] || (verify && state["verification"]["status"] == "incomplete") || (trace && state["trace"]["status"] != "recorded")
             "incomplete"
           elsif state["observed_failed_specs"].empty?
             "passed"
@@ -118,6 +143,10 @@ module Cleave
       rescue Interrupt
         terminate(children)
         state["verification"] = { "status" => "incomplete", "errors" => ["Run interrupted."] } if verify
+        if trace
+          write_state(trace_path, TraceCapture.incomplete("incomplete"))
+          state["trace"] = { "status" => "incomplete", "complete" => false, "error" => "Run interrupted." }
+        end
         state["outcome"] = "incomplete"
         state["exit_code"] = 130
         state["errors"] << "Run interrupted."
@@ -127,6 +156,10 @@ module Cleave
       rescue StandardError => error
         terminate(children)
         state["verification"] = { "status" => "incomplete", "errors" => ["#{error.class}: #{error.message}"] } if verify
+        if trace
+          write_state(trace_path, TraceCapture.incomplete("incomplete"))
+          state["trace"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
+        end
         state["outcome"] = "incomplete"
         state["exit_code"] = 1
         state["errors"] << "#{error.class}: #{error.message}"
@@ -166,9 +199,9 @@ module Cleave
     end
     private_class_method :discover
 
-    def spawn_job(root, command, log, children)
+    def spawn_job(root, command, log, children, environment = {})
       File.open(log, "wb") do |file|
-        pid = Process.spawn({ "BUNDLE_GEMFILE" => File.join(root, "Gemfile") }, *command,
+        pid = Process.spawn({ "BUNDLE_GEMFILE" => File.join(root, "Gemfile") }.merge(environment), *command,
                             chdir: root, out: file, err: [:child, :out], pgroup: true)
         children << pid
         pid
