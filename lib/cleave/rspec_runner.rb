@@ -129,6 +129,9 @@ module Cleave
       raise RunnerError, "invalid RSpec discovery manifest" unless manifest.is_a?(Hash) && manifest.keys == ["files"] && manifest["files"].is_a?(Array)
       files = manifest["files"].map { |path| relative_path(root, path) }
       raise RunnerError, "duplicate RSpec discovery paths" unless files.uniq.length == files.length
+      if files.any? { |path| path.match?(/[\[\]:]/) }
+        raise RunnerError, "RSpec selector characters in filenames are unsupported in parallel mode; run serially."
+      end
       files.sort
     rescue JSON::ParserError, Errno::ENOENT => error
       raise RunnerError, "invalid RSpec discovery output: #{error.message}"
@@ -199,10 +202,11 @@ module Cleave
     private_class_method :relative_path
 
     def terminate(children)
-      children.each { |pid| Process.kill("TERM", -pid) rescue nil }
+      groups = children.dup
+      groups.each { |pid| Process.kill("TERM", -pid) rescue nil }
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2
-      pending = children.dup
-      until pending.empty? || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+      pending = groups.dup
+      loop do
         pending.delete_if do |pid|
           begin
             !!Process.waitpid(pid, Process::WNOHANG)
@@ -210,9 +214,20 @@ module Cleave
             true
           end
         end
-        sleep 0.02 unless pending.empty?
+        alive = groups.any? do |pid|
+          begin
+            Process.kill(0, -pid)
+            true
+          rescue Errno::ESRCH
+            false
+          rescue Errno::EPERM
+            true
+          end
+        end
+        break if (!alive && pending.empty?) || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+        sleep 0.02
       end
-      pending.each { |pid| Process.kill("KILL", -pid) rescue nil }
+      groups.each { |pid| Process.kill("KILL", -pid) rescue nil }
       pending.each { |pid| Process.wait(pid) rescue nil }
       children.clear
     end
