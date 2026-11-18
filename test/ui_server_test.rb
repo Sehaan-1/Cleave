@@ -92,9 +92,9 @@ class UIServerTest < Minitest::Test
     env["GEM_HOME"] = gem_home
     env["GEM_PATH"] = ([gem_home] + Gem.path).uniq.join(File::PATH_SEPARATOR)
     env["PATH"] = "" # The command must not need Node, npm, or browser utilities.
-    pid = nil
-    Open3.popen2e(env, Gem.ruby, File.join(gem_home, "bin/cleave"), "ui", "--no-open", chdir: @root) do |stdin, stream, wait|
-      pid = wait.pid
+    stdin = stream = wait = nil
+    begin
+      stdin, stream, wait = Open3.popen2e(env, Gem.ruby, File.join(gem_home, "bin/cleave"), "ui", "--no-open", chdir: @root)
       stdin.close
       line = Timeout.timeout(20) { stream.gets }
       assert_match(%r{Cleave workbench: http://127\.0\.0\.1:\d+/[0-9a-f]{64}/}, line.to_s)
@@ -104,14 +104,18 @@ class UIServerTest < Minitest::Test
       assert_includes response.body, 'name="cleave-local-ui"'
       uri = URI(url)
       assert_equal "200", request(url, path: uri.path + "artifacts/bitmap_index.json").code
-      Process.kill("INT", pid)
-      Timeout.timeout(10) { wait.value }
-      pid = nil
-    end
-  ensure
-    if pid
-      Process.kill("KILL", pid) rescue nil
-      Process.wait(pid) rescue nil
+    ensure
+      if wait
+        Process.kill("INT", wait.pid) if wait.alive?
+        begin
+          Timeout.timeout(10) { wait.value }
+        rescue Timeout::Error
+          Process.kill("KILL", wait.pid) rescue nil
+          wait.value
+        end
+      end
+      stdin.close if stdin && !stdin.closed?
+      stream.close if stream && !stream.closed?
     end
   end
 end

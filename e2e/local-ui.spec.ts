@@ -35,3 +35,46 @@ test('local UI shows fetch errors without substituting fixture data', async ({ p
   await expect(page.getByText('No artifacts loaded')).toBeVisible();
   await expect(page.getByText('2 indexed specs')).toHaveCount(0);
 });
+
+test('packaged loopback server renders real artifacts under its content policy', async ({ page }) => {
+  test.skip(process.env.CLEAVE_REAL_UI !== '1', 'Requires Ruby and Bundler');
+  const { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, resolve } = await import('node:path');
+  const { spawn, spawnSync } = await import('node:child_process');
+  const project = mkdtempSync(join(tmpdir(), 'cleave-browser-'));
+  let child: ReturnType<typeof spawn> | undefined;
+  try {
+    mkdirSync(join(project, '.cleave'));
+    for (const name of ['inventory.json', 'bitmap_index.json']) copyFileSync(resolve(files, name), join(project, '.cleave', name));
+    writeFileSync(join(project, 'Gemfile'), `source 'https://rubygems.org'\ngem 'cleave-ste', path: ${JSON.stringify(resolve('.'))}\n`);
+    const lock = spawnSync('bundle', ['lock', '--local'], { cwd:project, encoding:'utf8' });
+    if (lock.status !== 0) throw new Error(`bundle lock failed: ${lock.stdout} ${lock.stderr}`);
+    child = spawn('bundle', ['exec', 'cleave', 'ui', '--no-open'], { cwd:project, stdio:['ignore','pipe','pipe'] });
+    const proc = child;
+    const url = await new Promise<string>((resolveUrl, reject) => {
+      let output = '';
+      const timer = setTimeout(() => reject(new Error(`Server startup timed out: ${output}`)), 20_000);
+      proc.stdout!.on('data', chunk => { output += String(chunk); const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/[0-9a-f]{64}\//); if (found) { clearTimeout(timer); resolveUrl(found[0]); } });
+      proc.stderr!.on('data', chunk => { output += String(chunk); });
+      proc.on('exit', code => { clearTimeout(timer); reject(new Error(`Server exited ${code}: ${output}`)); });
+      proc.on('error', reject);
+    });
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(url);
+    await expect(page.getByRole('heading', { name:'app/服务.rb' })).toBeVisible();
+    await expect(page.getByText('Project snapshot · loopback')).toBeVisible();
+    await expect(page.locator('.artifact-spec').filter({ hasText:'spec/beta_spec.rb' })).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    if (child && child.exitCode === null) {
+      const proc = child;
+      const exited = new Promise<void>(resolveExit => proc.once('exit', () => resolveExit()));
+      proc.kill('SIGINT');
+      await Promise.race([exited, new Promise<void>(resolveWait => setTimeout(resolveWait, 3000))]);
+      if (proc.exitCode === null) proc.kill('SIGKILL');
+    }
+    rmSync(project, { recursive:true, force:true });
+  }
+});
