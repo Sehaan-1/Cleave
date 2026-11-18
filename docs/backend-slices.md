@@ -15,6 +15,7 @@ The Ruby engine is built in independently reviewable slices. This sequence suppl
 8b. **Local CLI delivery**: package and serve a validated startup snapshot of the artifact pair from the Ruby CLI on loopback.
 9a. **RSpec trace capture**: trace one configured full-suite RSpec process, persist incomplete root/example observations; do not skip tests.
 9b. **Automated artifact generation**: opt in to build and persist incomplete inventories and indexes from the same serial traced run; Git-based before/after snapshots are not transactional, and test skipping remains disabled.
-10a. **Diagnostic project plan**: expose current Git inventory, RSpec dry-run discovery and guardrailed candidates as versioned JSON; no selective execution or workbench integration.
+10a. **Diagnostic project plan**: expose current Git inventory, RSpec dry-run discovery and guardrailed candidates as versioned JSON; no selective execution.
+10b. **Local plan viewer**: opt in to compute and display a validated diagnostic startup plan in the loopback workbench, separate from simulator and artifact inspector; no selective execution.
 
 Exact boundaries and ordering may change as implementation constraints are discovered. A static AST is not evidence that a skipped test is safe.

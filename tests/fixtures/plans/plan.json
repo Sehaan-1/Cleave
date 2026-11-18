@@ -1,0 +1,24 @@
+{
+  "schema": "cleave.diagnostic_plan",
+  "version": 1,
+  "diagnostic_only": true,
+  "suite_coverage_verified": false,
+  "requires_full_suite": true,
+  "execution_ready": false,
+  "baseline_fingerprint": "d2b402386ff0dce879e6bd2d0f53b3be9b0b364246633bac10c86e8c9f98e7ed",
+  "current_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "changes": {"added": ["new.txt"], "deleted": [], "modified": ["app/服务.rb"]},
+  "discovered_specs": ["spec/alpha_spec.rb", "spec/beta_spec.rb", "spec/gamma_spec.rb"],
+  "candidate_specs": ["spec/alpha_spec.rb", "spec/beta_spec.rb"],
+  "root_changes": [],
+  "unmapped_changes": ["new.txt"],
+  "fallback_reasons": ["incomplete_index", "spec_universe_changed", "unmapped_changes", "previous_failures_unavailable"],
+  "previous_failures_available": false,
+  "union_nanoseconds": 1000,
+  "limitations": ["Incomplete trace.", "Previous failures unavailable."],
+  "decisions": [
+    {"spec": "spec/alpha_spec.rb", "candidate": true, "bitmap_sources": ["app/服务.rb"], "changed_spec": false, "unindexed_spec": false, "reasons": ["bitmap_hit", "incomplete_index_fallback"], "hazards": []},
+    {"spec": "spec/beta_spec.rb", "candidate": true, "bitmap_sources": ["app/服务.rb"], "changed_spec": false, "unindexed_spec": false, "reasons": ["bitmap_hit", "prism_hazard", "incomplete_index_fallback"], "hazards": [{"name": "glob", "node_type": "CallNode", "line": 3, "column": 0, "length": 7}]},
+    {"spec": "spec/gamma_spec.rb", "candidate": false, "bitmap_sources": [], "changed_spec": false, "unindexed_spec": false, "reasons": ["incomplete_index_fallback"], "hazards": []}
+  ]
+}
