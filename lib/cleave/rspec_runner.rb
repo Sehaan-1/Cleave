@@ -61,7 +61,10 @@ module Cleave
             json = File.join(temp, "worker-#{i}.json")
             log = File.join(temp, "worker-#{i}.log")
             command = ["bundle", "exec", "rspec", "--format", "progress", "--format", "json", "--out", json]
-            command += ["--", *group] if group
+            # RSpec can append cwd to explicit paths when a configured pattern
+            # starts with a directory (e.g. spec/**/*_spec.rb). A **-prefixed
+            # pattern disables that expansion; the discovered files remain authoritative.
+            command += ["--pattern", "**/*", "--", *group] if group
             [spawn_job(root, command, log, children), json, log, group]
           end
           # Processes have already started concurrently; wait only for our own children.
