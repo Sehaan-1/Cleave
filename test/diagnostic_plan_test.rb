@@ -77,6 +77,74 @@ class DiagnosticPlanTest < Minitest::Test
     assert_operator plan["union_nanoseconds"], :>=, 0
   end
 
+  def test_previous_failures_are_opt_in_and_use_latest_consistent_run
+    original = File.read(File.join(@root, "spec/d_spec.rb"))
+    write("spec/d_spec.rb", "RSpec.describe('d') { it('fails') { expect(1).to eq(2) } }\n")
+    failed = Cleave::RSpecRunner.run(root: @root, output: StringIO.new)
+    assert_equal "failed", failed["outcome"]
+    write("spec/d_spec.rb", original)
+    default = build
+    refute default["previous_failures_available"]
+    refute_includes default["candidate_specs"], "spec/d_spec.rb"
+    plan = build(previous_failures: true)
+    assert_equal 2, plan["version"]
+    assert plan["previous_failures_available"]
+    refute_includes plan["fallback_reasons"], "previous_failures_unavailable"
+    assert_equal [], plan["unmatched_previous_failures"]
+    assert_includes plan["candidate_specs"], "spec/d_spec.rb"
+    assert_includes plan["decisions"].find { |d| d["spec"] == "spec/d_spec.rb" }["reasons"], "previous_failure"
+    assert_equal Digest::SHA256.file(File.join(@root, ".cleave/last_run.json")).hexdigest, plan["previous_failures_source_sha256"]
+    assert plan["requires_full_suite"]
+    refute plan["execution_ready"]
+    stdout, stderr, status = Open3.capture3(@env, "bundle", "exec", "cleave", "plan", "--previous-failures", chdir: @root)
+    assert status.success?, stderr
+    assert_includes JSON.parse(stdout)["candidate_specs"], "spec/d_spec.rb"
+    server = Cleave::UIServer.new(root: @root, plan: true, previous_failures: true, output: StringIO.new)
+    thread = Thread.new { server.start }
+    begin
+      uri = URI(server.url)
+      response = Net::HTTP.new(uri.host, uri.port, nil).get(uri.path + "artifacts/plan.json")
+      assert_equal 2, JSON.parse(response.body)["version"]
+    ensure
+      server.shutdown
+      thread.join(5)
+    end
+    File.delete(File.join(@root, "spec/d_spec.rb"))
+    plan = build(previous_failures: true)
+    assert_equal ["spec/d_spec.rb"], plan["unmatched_previous_failures"]
+    assert_includes plan["fallback_reasons"], "previous_failures_unmatched"
+  end
+
+  def test_previous_failures_known_empty_and_reject_bad_records
+    plan = build(previous_failures: true)
+    assert plan["previous_failures_available"]
+    assert_equal [], plan["unmatched_previous_failures"]
+    refute_includes plan["fallback_reasons"], "previous_failures_unavailable"
+    path = File.join(@root, ".cleave/last_run.json")
+    good = JSON.parse(File.read(path))
+    variants = []
+    variants << good.merge("outcome" => "running")
+    variants << good.merge("outcome" => "incomplete")
+    variants << good.merge("reports_complete" => false)
+    variants << good.merge("suite_coverage_verified" => true)
+    variants << good.merge("outcome" => "failed", "exit_code" => 1)
+    variants << good.merge("observed_failed_specs" => ["../bad.rb"])
+    variants << good.merge("observed_failed_specs" => ["spec/a_spec.rb", "spec/a_spec.rb"])
+    variants << good.merge("telemetry" => good.fetch("telemetry").merge("failed_examples" => 1))
+    variants.each do |bad|
+      File.write(path, JSON.generate(bad))
+      assert_raises(Cleave::ArtifactError) { build(previous_failures: true) }
+      refute build["previous_failures_available"]
+    end
+    File.write(path, '{"schema":"cleave.rspec_run","schema":"cleave.rspec_run"}')
+    assert_raises(Cleave::ArtifactError) { build(previous_failures: true) }
+    File.delete(path)
+    assert_raises(Cleave::ArtifactError) { build(previous_failures: true) }
+    File.symlink(File.join(@root, "a.json"), path)
+    assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { build(previous_failures: true) }.message)
+    assert_raises(ArgumentError) { Cleave::UIServer.new(root: @root, previous_failures: true) }
+  end
+
   def test_changed_root_falls_back_in_candidate
     write("boot.json", "changed")
     plan = build
