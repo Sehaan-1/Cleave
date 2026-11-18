@@ -52,7 +52,7 @@ class UIServerTest < Minitest::Test
       assert_equal "200", inventory.code
       assert_equal JSON.parse(File.read(File.join(@root, ".cleave/inventory.json"))), JSON.parse(inventory.body)
       File.write(File.join(@root, ".cleave/inventory.json"), "modified after startup")
-      assert_equal inventory.body, request(server.url, path: uri.path + "artifacts/inventory.json").body
+      assert_equal inventory.body.b, request(server.url, path: uri.path + "artifacts/inventory.json").body.b
       assert_equal "404", request(server.url, path: "/artifacts/inventory.json").code
       assert_equal "404", request(server.url, path: uri.path + "artifacts/last_run.json").code
       assert_equal "404", request(server.url, path: uri.path + "assets/../../.cleave/inventory.json").code
