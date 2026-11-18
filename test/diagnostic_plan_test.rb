@@ -112,7 +112,7 @@ class DiagnosticPlanTest < Minitest::Test
       assert_equal false, plan["execution_ready"]
       assert_includes plan["decisions"].find { |item| item["spec"] == "spec/a_spec.rb" }["bitmap_sources"], "a.json"
       write("a.json", "changed again")
-      assert_equal response.body, http.get(uri.path + "artifacts/plan.json").body
+      assert_equal response.body.b, http.get(uri.path + "artifacts/plan.json").body.b
       assert_equal "404", http.get("/artifacts/plan.json").code
       request = Net::HTTP::Get.new(uri.path + "artifacts/plan.json")
       request["Origin"] = "https://evil.example"
