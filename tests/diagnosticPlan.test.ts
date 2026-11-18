@@ -30,3 +30,22 @@ test("rejects malformed and inconsistent plan data", () => {
   assert.throws(() => importDiagnosticPlan(text.replace('"version": 1,', '"version": 1, "version": 1,')), /duplicate key/);
   assert.throws(() => importDiagnosticPlan("not json"));
 });
+
+test("imports v2 prior failure attribution and rejects inconsistent metadata", () => {
+  const d = raw();
+  d.version = 2; d.previous_failures_available = true;
+  d.previous_failures_source_sha256 = "a".repeat(64);
+  d.unmatched_previous_failures = ["spec/deleted_spec.rb"];
+  d.fallback_reasons = d.fallback_reasons.filter((s: string) => s !== "previous_failures_unavailable");
+  d.fallback_reasons.push("previous_failures_unmatched");
+  d.decisions[2].candidate = true; d.decisions[2].reasons.push("previous_failure");
+  d.candidate_specs.push(d.decisions[2].spec);
+  const plan = importDiagnosticPlan(JSON.stringify(d));
+  assert.equal(plan.previous_failures_available, true);
+  assert.deepEqual(plan.unmatched_previous_failures, ["spec/deleted_spec.rb"]);
+  assert.equal(plan.decisions[2].candidate, true);
+  const bad = structuredClone(d); bad.unmatched_previous_failures = []; assert.throws(() => importDiagnosticPlan(JSON.stringify(bad)));
+  const bad2 = structuredClone(d); bad2.previous_failures_source_sha256 = "bad"; assert.throws(() => importDiagnosticPlan(JSON.stringify(bad2)));
+  const bad3 = structuredClone(d); bad3.decisions[2].reasons = ["incomplete_index_fallback"]; assert.throws(() => importDiagnosticPlan(JSON.stringify(bad3)));
+  const bad4 = structuredClone(d); bad4.unmatched_previous_failures = [d.decisions[0].spec]; assert.throws(() => importDiagnosticPlan(JSON.stringify(bad4)));
+});
