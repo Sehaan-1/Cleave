@@ -10,6 +10,7 @@ require_relative "artifacts"
 require_relative "shadow_verification"
 require_relative "telemetry"
 require_relative "trace_capture"
+require_relative "index_generation"
 
 module Cleave
   class RunnerError < StandardError; end
@@ -21,13 +22,16 @@ module Cleave
     STATUS_VERSION = 1
     MAX_WORKERS = 32
 
-    def run(root:, workers: 1, output: $stdout, verify: false, trace: false)
+    def run(root:, workers: 1, output: $stdout, verify: false, trace: false, index: false, includes: [])
       raise ArgumentError, "workers must be an integer from 1 to #{MAX_WORKERS}" unless workers.is_a?(Integer) && workers.between?(1, MAX_WORKERS)
       raise ArgumentError, "verify must be true or false" unless [true, false].include?(verify)
       raise ArgumentError, "verification requires one worker" if verify && workers != 1
       raise ArgumentError, "trace must be true or false" unless [true, false].include?(trace)
       raise ArgumentError, "tracing requires one worker" if trace && workers != 1
       raise ArgumentError, "tracing and verification must be separate runs" if trace && verify
+      raise ArgumentError, "index must be true or false" unless [true, false].include?(index)
+      raise ArgumentError, "index generation requires tracing" if index && !trace
+      raise ArgumentError, "includes require index generation" unless includes.is_a?(Array) && (index || includes.empty?)
       root = File.realpath(root)
       raise ArgumentError, "not a directory: #{root}" unless File.directory?(root)
       raise RunnerError, "project Gemfile not found in #{root}" unless File.file?(File.join(root, "Gemfile"))
@@ -41,13 +45,13 @@ module Cleave
       raise RunnerError, "runner files must not be symlinks" if File.symlink?(lock_path) || File.symlink?(status_path) || (trace && File.symlink?(trace_path))
       File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
         raise RunnerError, "another Cleave run is active" unless lock.flock(File::LOCK_EX | File::LOCK_NB)
-        execute(root, state_dir, status_path, workers, output, verify, trace, trace_path)
+        execute(root, state_dir, status_path, workers, output, verify, trace, trace_path, index, includes)
       ensure
         lock.flock(File::LOCK_UN) if lock
       end
     end
 
-    def execute(root, state_dir, status_path, workers, output, verify, trace, trace_path)
+    def execute(root, state_dir, status_path, workers, output, verify, trace, trace_path, index, includes)
       started = Telemetry.now
       state = { "schema" => STATUS_SCHEMA, "version" => STATUS_VERSION, "outcome" => "running",
                 "requested_workers" => workers, "actual_workers" => 0, "exit_code" => nil,
@@ -55,11 +59,20 @@ module Cleave
                 "example_count" => 0, "errors" => [], "telemetry" => Telemetry.initial }
       state["verification"] = { "status" => "running" } if verify
       state["trace"] = { "status" => "running", "complete" => false } if trace
+      state["index"] = { "status" => "running", "complete" => false } if index
       write_state(trace_path, TraceCapture.incomplete("running")) if trace
       write_state(status_path, state)
       children = []
       begin
         Dir.mktmpdir("rspec-run-", state_dir) do |temp|
+          baseline = include_paths = nil
+          if index
+            begin
+              baseline, include_paths = IndexGeneration.prepare(root: root, includes: includes)
+            rescue StandardError => error
+              state["index"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
+            end
+          end
           verification_files = current = plan = nil
           if verify
             begin
@@ -120,6 +133,7 @@ module Cleave
             state["verification"] = ShadowVerification.finish(root: root, files: verification_files,
                                                                current: current, plan: plan, state: state, observed_specs: seen_specs.to_a)
           end
+          report = nil
           if trace
             begin
               raise ArtifactError, "RSpec reports were incomplete" unless state["reports_complete"]
@@ -131,7 +145,16 @@ module Cleave
               state["trace"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
             end
           end
-          state["outcome"] = if !state["reports_complete"] || (verify && state["verification"]["status"] == "incomplete") || (trace && state["trace"]["status"] != "recorded")
+          if index && baseline
+            begin
+              raise ArtifactError, "trace capture was incomplete" unless report && state.dig("trace", "status") == "recorded"
+              state["index"] = IndexGeneration.finish(root: root, directory: state_dir, before: baseline,
+                                                       includes: include_paths, report: report, specs: seen_specs.to_a.sort)
+            rescue StandardError => error
+              state["index"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
+            end
+          end
+          state["outcome"] = if !state["reports_complete"] || (verify && state["verification"]["status"] == "incomplete") || (trace && state["trace"]["status"] != "recorded") || (index && state["index"]["status"] != "recorded")
             "incomplete"
           elsif state["observed_failed_specs"].empty?
             "passed"
@@ -147,6 +170,7 @@ module Cleave
           write_state(trace_path, TraceCapture.incomplete("incomplete"))
           state["trace"] = { "status" => "incomplete", "complete" => false, "error" => "Run interrupted." }
         end
+        state["index"] = { "status" => "incomplete", "complete" => false, "error" => "Run interrupted." } if index
         state["outcome"] = "incomplete"
         state["exit_code"] = 130
         state["errors"] << "Run interrupted."
@@ -160,6 +184,7 @@ module Cleave
           write_state(trace_path, TraceCapture.incomplete("incomplete"))
           state["trace"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" }
         end
+        state["index"] = { "status" => "incomplete", "complete" => false, "error" => "#{error.class}: #{error.message}" } if index
         state["outcome"] = "incomplete"
         state["exit_code"] = 1
         state["errors"] << "#{error.class}: #{error.message}"
