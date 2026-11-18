@@ -7,12 +7,28 @@ require "cleave"
 workers = 1
 verify = false
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify]"
+  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify]\n       bundle exec cleave graph --output FILE.html"
   opts.on("--workers N", Integer, "Run the configured full suite in N file workers (default: 1)") { |value| workers = value }
   opts.on("--verify", "Compare a diagnostic preview with the full suite (one worker)") { verify = true }
   opts.on("-h", "--help", "Show help") { puts opts; exit 0 }
 end
 begin
+  if ARGV.first == "graph"
+    ARGV.shift
+    destination = nil
+    graph_parser = OptionParser.new do |opts|
+      opts.banner = "Usage: bundle exec cleave graph --output FILE.html"
+      opts.on("--output FILE", "Write a standalone HTML graph") { |value| destination = value }
+      opts.on("-h", "--help", "Show help") { puts opts; exit 0 }
+    end
+    graph_parser.parse!(ARGV)
+    raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
+    raise OptionParser::MissingArgument, "--output" unless destination
+    inventory, index = Cleave::Artifacts.read(File.join(Dir.pwd, ".cleave"))
+    path = Cleave::GraphExport.write(destination, inventory: inventory, index: index)
+    puts "Wrote diagnostic graph: #{path} (incomplete index; do not use to skip tests)"
+    exit 0
+  end
   ARGV.shift if ARGV.first == "run"
   parser.parse!(ARGV)
   raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
@@ -30,7 +46,7 @@ begin
 rescue Interrupt
   warn "Cleave: interrupted"
   exit 130
-rescue OptionParser::ParseError, ArgumentError, Cleave::RunnerError, SystemCallError => error
+rescue OptionParser::ParseError, ArgumentError, Cleave::RunnerError, Cleave::ArtifactError, SystemCallError => error
   warn "Cleave: #{error.message}"
   exit 2
 end
