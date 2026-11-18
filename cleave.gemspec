@@ -3,7 +3,7 @@
 Gem::Specification.new do |spec|
   spec.name = "cleave-ste"
   spec.version = "0.1.0"
-  spec.summary = "Static dependency facts for selective test execution"
+  spec.summary = "Dependency analysis and scoped observations for selective test execution"
   spec.authors = ["Cleave contributors"]
   spec.license = "Apache-2.0"
   spec.required_ruby_version = ">= 3.2"
