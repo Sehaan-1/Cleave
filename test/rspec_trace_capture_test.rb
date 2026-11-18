@@ -73,6 +73,12 @@ class RSpecTraceCaptureTest < Minitest::Test
     report = Cleave::TraceCapture.read(File.join(@root, ".cleave/last_trace.json"), root: @root)
     assert_equal capture.fetch("report"), report.to_h
     assert report.limitations.any? { |message| message.include?("child") || message.include?("Child") }
+    inventory = Cleave::Inventory.capture(root: @root, paths: %w[spec/a_spec.rb spec/b_spec.rb boot.json a.json b.json hook.json thread.json])
+    index = Cleave::BitmapIndex.build(inventory: inventory, root: @root, specs: %w[spec/a_spec.rb spec/b_spec.rb], reports: [report])
+    assert_equal 1, index.masks.fetch("a.json")
+    assert_equal 2, index.masks.fetch("b.json")
+    assert_includes index.root_paths, "boot.json"
+    refute index.to_h.fetch("complete")
   end
 
   def test_failed_example_is_still_reported_but_nonzero
@@ -92,6 +98,42 @@ class RSpecTraceCaptureTest < Minitest::Test
     assert_equal "incomplete", capture["status"]
     assert_nil capture["report"]
     assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.read(File.join(@root, ".cleave/last_trace.json"), root: @root) }
+  end
+
+  def test_forked_child_cannot_replace_parent_trace
+    write("child.json", "{}")
+    write("parent.json", "{}")
+    write("spec/fork_spec.rb", <<~RUBY)
+      RSpec.describe('fork') do
+        it('waits for a child') do
+          child = fork { File.read('child.json'); exit 0 }
+          Process.wait(child)
+          File.read('parent.json')
+        end
+      end
+    RUBY
+    result, output, capture = run_trace
+    assert_equal "passed", result["outcome"], "#{result.inspect}\n#{output}"
+    events = capture.fetch("report").fetch("events")
+    assert_includes events, { "scope" => "spec/fork_spec.rb", "path" => "parent.json", "kind" => "io_read", "status" => "success" }
+    refute events.any? { |item| item["path"] == "child.json" }
+  end
+
+  def test_trace_reader_rejects_malformed_or_untrusted_shape
+    write("spec/example_spec.rb", "RSpec.describe('ok') { it('passes') {} }\n")
+    result, output, capture = run_trace
+    assert_equal "passed", result["outcome"], "#{result.inspect}\n#{output}"
+    path = File.join(@root, ".cleave/last_trace.json")
+    tampered = Marshal.load(Marshal.dump(capture))
+    tampered["report"]["complete"] = true
+    File.write(path, JSON.generate(tampered))
+    assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.read(path, root: @root) }
+    File.write(path, JSON.generate(capture))
+    Dir.mktmpdir { |other| assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.read(path, root: other) } }
+    File.delete(path)
+    File.symlink(File.join(@root, "spec/example_spec.rb"), path)
+    assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.read(path, root: @root) }
+    assert_raises(Cleave::RunnerError) { Cleave::RSpecRunner.run(root: @root, trace: true) }
   end
 
   def test_cli_trace_and_invalid_combinations
