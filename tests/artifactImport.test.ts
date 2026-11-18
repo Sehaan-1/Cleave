@@ -35,3 +35,11 @@ test("rejects malformed, ambiguous and mismatched artifacts", () => {
   assert.throws(() => run(inv, { ...idx, limitations:[] }), /must include limitations/);
   assert.throws(() => run(inv, { ...idx, masks:[{ path:'a', hex:'0x1' },{ path:'a', hex:'0x2' }] }), /sorted and unique/);
 });
+
+
+test("uses Ruby UTF-8 sort and canonical fingerprint for Unicode paths", () => {
+  const invText = readFileSync("tests/fixtures/unicode-artifacts/inventory.json", "utf8");
+  const idxText = readFileSync("tests/fixtures/unicode-artifacts/bitmap_index.json", "utf8");
+  const result = importArtifacts(invText, idxText);
+  assert.deepEqual(result.files.map(f => f.path), ["app/eol\n.rb", "app/x\u2028.rb", "app/\ue000.rb", "app/𐀀.rb", "spec/alpha_spec.rb"]);
+});

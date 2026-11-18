@@ -1,0 +1,14 @@
+{
+  "schema": "cleave.bitmap_index",
+  "version": 1,
+  "inventory_fingerprint": "15ad717f8f6dfdc3c3ab64fc58ac025b387d686366afb929370154c58f05455c",
+  "specs": [
+    "spec/alpha_spec.rb"
+  ],
+  "masks": [],
+  "root_paths": [],
+  "limitations": [
+    "partial"
+  ],
+  "complete": false
+}
