@@ -18,6 +18,7 @@ begin
   raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
   result = Cleave::RSpecRunner.run(root: Dir.pwd, workers: workers, verify: verify)
   puts "\nCleave: #{result['outcome']} · #{result['example_count']} examples · #{result['actual_workers']} worker(s)"
+  puts Cleave::Telemetry.render(result)
   warn result["errors"].join("\n") unless result["errors"].empty?
   if verify
     audit = result.fetch("verification")

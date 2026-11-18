@@ -48,6 +48,7 @@ module Cleave
         "candidate_specs" => candidates, "discovered_specs" => files,
         "observed_missed_failure_specs" => misses.sort, "errors" => errors,
         "inventory_fingerprint" => current.fingerprint, "fallback_reasons" => plan.fallback_reasons,
+        "union_nanoseconds" => plan.selection.union_nanoseconds,
         "previous_failures_available" => false, "suite_coverage_verified" => false }
     end
   end

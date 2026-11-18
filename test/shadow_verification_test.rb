@@ -48,6 +48,9 @@ class ShadowVerificationTest < Minitest::Test
     assert_equal "observed_misses", audit["status"]
     assert_equal ["spec/a_spec.rb"], audit["candidate_specs"]
     assert_equal @paths, audit["discovered_specs"]
+    assert_equal 2, result.dig("telemetry", "discovered_spec_files")
+    assert_operator audit.fetch("union_nanoseconds"), :>=, 0
+    assert_match(/Diagnostic candidate: 1 of 2 discovered files \(not executed selectively\)/, Cleave::Telemetry.render(result))
     assert_equal ["spec/b_spec.rb"], audit["observed_missed_failure_specs"]
     assert_includes audit["fallback_reasons"], "previous_failures_unavailable"
     refute audit["suite_coverage_verified"]
@@ -115,6 +118,8 @@ class ShadowVerificationTest < Minitest::Test
     output, status = Open3.capture2e(env, "bundle", "exec", "cleave", "run", "--verify", chdir: @root)
     assert_equal 1, status.exitstatus, output
     assert_match(/Shadow verification: observed_misses/, output)
+    assert_match(/Diagnostic candidate: 1 of 2 discovered files/, output)
+    assert_match(/Bitmap OR only:/, output)
     assert_match(/spec\/b_spec.rb/, output)
   end
 end

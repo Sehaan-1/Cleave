@@ -49,6 +49,32 @@ class RSpecRunnerTest < Minitest::Test
     assert_equal result, persisted
   end
 
+  def test_telemetry_counts_reported_outcomes_and_measures_worker_wall_time
+    spec("a_spec.rb", <<~RUBY)
+      RSpec.describe('a') do
+        it('passes') { expect(true).to be(true) }
+        it('fails') { expect(1).to eq(2) }
+        it('is pending')
+      end
+    RUBY
+    result, output, persisted = run_suite
+    assert_equal "failed", result["outcome"], "#{result.inspect}\n#{output}"
+    metrics = result.fetch("telemetry")
+    assert_equal 1, metrics["version"]
+    assert_equal [1, 1, 1], metrics.values_at("passed_examples", "failed_examples", "pending_examples")
+    assert_equal 3, result["example_count"]
+    assert_equal 1, metrics["reported_spec_files"]
+    assert_nil metrics["discovered_spec_files"]
+    assert_operator metrics.fetch("runner_elapsed_ns"), :>, 0
+    assert_operator metrics.fetch("worker_collection_elapsed_ns"), :>, 0
+    assert_operator metrics.fetch("runner_elapsed_ns"), :>=, metrics.fetch("worker_collection_elapsed_ns")
+    assert_equal metrics, persisted.fetch("telemetry")
+    rendered = Cleave::Telemetry.render(result)
+    assert_match(/3 \(1 passed, 1 failed, 1 pending\)/, rendered)
+    assert_match(/Discovered spec files: unavailable/, rendered)
+    assert_match(/no selective skipping/, rendered)
+  end
+
   def test_parallel_runs_all_discovered_files_and_records_failures
     File.write(File.join(@root, ".rspec"), "--pattern spec/**/*_check.rb\n")
     spec("a_check.rb", "RSpec.describe('a') { it('passes') { expect(1).to eq(1) } }\n")
@@ -58,6 +84,8 @@ class RSpecRunnerTest < Minitest::Test
     assert_equal "failed", result["outcome"], "#{result.inspect}\n#{output}"
     assert_equal 1, result["exit_code"]
     assert_equal 2, result["actual_workers"]
+    assert_equal 2, result.dig("telemetry", "discovered_spec_files")
+    assert_equal 2, result.dig("telemetry", "reported_spec_files")
     assert_equal 2, result["example_count"]
     assert_equal ["spec/space name_check.rb"], result["observed_failed_specs"]
     assert result["reports_complete"]
@@ -138,6 +166,8 @@ class RSpecRunnerTest < Minitest::Test
     assert_equal "incomplete", result["outcome"]
     assert_equal 1, result["exit_code"]
     refute result["reports_complete"]
+    assert_nil result.dig("telemetry", "worker_collection_elapsed_ns")
+    assert_match(/partial reports/, Cleave::Telemetry.render(result))
     assert_equal result, persisted
   end
 
@@ -147,6 +177,8 @@ class RSpecRunnerTest < Minitest::Test
     output, status = Open3.capture2e(env, "bundle", "exec", "cleave", "--workers", "2", chdir: @root)
     assert_equal 1, status.exitstatus, output
     assert_match(/Cleave: failed/, output)
+    assert_match(/Telemetry \(complete reports; suite coverage unverified\)/, output)
+    assert_match(/1 \(0 passed, 1 failed, 0 pending\)/, output)
     record = JSON.parse(File.read(File.join(@root, ".cleave/last_run.json")))
     assert_equal ["spec/a_spec.rb"], record["observed_failed_specs"]
   end
@@ -177,6 +209,8 @@ class RSpecRunnerTest < Minitest::Test
       assert_equal "incomplete", record["outcome"]
       assert_includes record["errors"], "Run interrupted."
       refute record["suite_coverage_verified"]
+      assert_operator record.dig("telemetry", "runner_elapsed_ns"), :>, 0
+      assert_nil record.dig("telemetry", "worker_collection_elapsed_ns")
     ensure
       if pid
         Process.kill("KILL", pid) rescue nil
