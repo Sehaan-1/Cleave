@@ -144,3 +144,16 @@ p plan.fallback_reasons
 ```
 
 The plan preserves overlapping reasons, hazard locations and unmatched previous-failure paths. The supplied previous-failure list is not independently verified or persisted by this API; missing or unmatched results are explicitly flagged. Root changes select the whole supplied universe in the preview. As before, the universe must be independently discovered, v1 indexes are incomplete, and the plan **always requires a full-suite fallback and is not execution-ready**. Neither the guardrailed preview nor the supplied list is authorization to skip tests. Parallel RSpec dispatch, persisted run outcomes, and failure propagation remain separate work.
+
+## Run the configured RSpec suite
+
+Add `cleave-ste` and `rspec` to your project's Gemfile and install its bundle. From the project root:
+
+```sh
+bundle exec cleave                    # one RSpec process (default)
+bundle exec cleave run --workers 4    # opt in to parallel file workers
+```
+
+This runner **never executes the selective preview**. The default runs `bundle exec rspec` with an additional JSON formatter, so the project's RSpec configuration determines its suite. With more than one worker, Cleave asks RSpec for its configured file list in a dry run, partitions that list without shell interpolation, and starts up to the requested number of processes. Dry-run discovery loads spec files and can therefore have top-level side effects. Parallel workers have separate Ruby processes: suite hooks, shared state, global ordering, randomization and plugins may behave differently from a single RSpec run. Use parallel mode only for suites designed for process isolation; run serially if that is not true. RSpec configuration or filters may intentionally exclude examples; this runner cannot prove coverage of every test in a repository.
+
+The exit status is zero only when the launched reports are consistent and report no failures; failing examples, discovery errors, crashed workers, and zero examples produce a nonzero exit. Worker output is displayed after each worker completes. Interrupting the runner terminates its worker process groups and records an incomplete run. Results are written atomically to `.cleave/last_run.json` under a process lock. A `running` record is written before launch so an interrupted/crashed run does not silently reuse an old success. The versioned record includes observed failed spec paths, example counts and errors. `reports_complete` only means the launched RSpec reports were readable and internally consistent; `suite_coverage_verified` is always false. These records are observations, not proof of full test coverage, a shadow audit, or authorization to skip tests. The file does not yet automatically feed guardrail planning.

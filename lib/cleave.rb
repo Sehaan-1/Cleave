@@ -10,3 +10,5 @@ require_relative "cleave/artifacts"
 require_relative "cleave/selection"
 
 require_relative "cleave/guardrails"
+
+require_relative "cleave/rspec_runner"
