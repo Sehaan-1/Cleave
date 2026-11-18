@@ -7,9 +7,13 @@ require "cleave"
 workers = 1
 verify = false
 trace = false
+index = false
+includes = []
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify | --trace]\n       bundle exec cleave graph --output FILE.html\n       bundle exec cleave ui [--port N] [--no-open]"
+  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify | --trace [--index [--include PATH]]]\n       bundle exec cleave graph --output FILE.html\n       bundle exec cleave ui [--port N] [--no-open]"
   opts.on("--workers N", Integer, "Run the configured full suite in N file workers (default: 1)") { |value| workers = value }
+  opts.on("--index", "Build diagnostic artifacts from this traced run (requires --trace)") { index = true }
+  opts.on("--include PATH", "Include an ignored file in the inventory (repeatable; requires --index)") { |value| includes << value }
   opts.on("--trace", "Capture incomplete root/example observations in a serial full-suite run") { trace = true }
   opts.on("--verify", "Compare a diagnostic preview with the full suite (one worker)") { verify = true }
   opts.on("-h", "--help", "Show help") { puts opts; exit 0 }
@@ -55,7 +59,7 @@ begin
   ARGV.shift if ARGV.first == "run"
   parser.parse!(ARGV)
   raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
-  result = Cleave::RSpecRunner.run(root: Dir.pwd, workers: workers, verify: verify, trace: trace)
+  result = Cleave::RSpecRunner.run(root: Dir.pwd, workers: workers, verify: verify, trace: trace, index: index, includes: includes)
   puts "\nCleave: #{result['outcome']} · #{result['example_count']} examples · #{result['actual_workers']} worker(s)"
   puts Cleave::Telemetry.render(result)
   warn result["errors"].join("\n") unless result["errors"].empty?
@@ -63,6 +67,11 @@ begin
     capture = result.fetch("trace")
     puts "Trace: #{capture.fetch('status')} · incomplete observations only"
     warn capture["error"] if capture["error"]
+  end
+  if index
+    generated = result.fetch("index")
+    puts "Artifacts: #{generated.fetch('status')} · incomplete observations only"
+    warn generated["error"] if generated["error"]
   end
   if verify
     audit = result.fetch("verification")
