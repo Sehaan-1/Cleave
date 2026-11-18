@@ -32,7 +32,7 @@ Scenario B's YAML/JSON runtime hits overlap mandatory masks, so masks are ORed, 
 
 This first delivery is **a simulator, not a Ruby CLI integration**. Fixture source, AST landmarks, file accesses, durations and shadow observations are deterministic example data; the browser does not run Prism, intercept syscalls, execute specs, or verify a CI build. A recorded demo replay is not proof of a zero false-negative rate for a custom diff. The snapshot's normalized TypeScript model is not a claim about an existing Ruby emitter's JSON schema.
 
-Importing actual `.cleave` artifacts and `bundle exec cleave ui` packaging are planned as separate deliveries once a real emitter, schema and Ruby CLI are available. See [the delivery ledger](docs/delivery.md) for acceptance criteria and example reconciliation.
+The Ruby library now emits versioned inventory and bitmap artifacts, but UI artifact import and `bundle exec cleave ui` packaging remain separate deliveries. See [the delivery ledger](docs/delivery.md) for acceptance criteria and example reconciliation.
 
 ## Ruby static-analysis slice
 
@@ -124,4 +124,23 @@ p result.union_nanoseconds      # monotonic time for bitmap OR only
 
 The preview ORs each changed path's recorded bitmap, attributes its bits to changed files, and additionally includes changed or newly discovered specs. `observed_baseline_mask` uses baseline index positions; `candidate_mask` and `execution_mask` use the sorted **current** spec positions. Removed specs are not execution candidates. Each decision exposes its bitmap sources, changed/unindexed status and fallback reasons. Root-scope changes and unmapped changes are reported separately. Timings are actual measurements, not a guaranteed latency target.
 
-**This API cannot authorize skipping or execute tests.** Every v1 index is incomplete, so `requires_full_suite?` is always true and `execution_ready?` is always false. `selected_specs` and `execution_mask` are full only over the caller-supplied current universe: independently discover the full suite; they cannot prove it contains every test. Omission of an indexed spec still present in the inventory is rejected, but unknown new/custom test paths cannot be inferred reliably. A future runner must invoke full-suite discovery when this fallback is set, never dispatch the preview or rely on the supplied list alone. Previous-failure and Prism guardrails, execution, static dependency resolution and shadow verification are not implemented by this slice.
+**This API cannot authorize skipping or execute tests.** Every v1 index is incomplete, so `requires_full_suite?` is always true and `execution_ready?` is always false. `selected_specs` and `execution_mask` are full only over the caller-supplied current universe: independently discover the full suite; they cannot prove it contains every test. Omission of an indexed spec still present in the inventory is rejected, but unknown new/custom test paths cannot be inferred reliably. A future runner must invoke full-suite discovery when this fallback is set, never dispatch the preview or rely on the supplied list alone. Prism and prior-failure guardrails are planned separately below. Execution, static dependency resolution and shadow verification remain unimplemented.
+
+## Guardrail planning
+
+`Cleave::Guardrails.plan` combines the selection preview with Prism hazards and caller-supplied previous failures. It re-reads every supplied current Ruby spec, verifies its SHA-256 against the current inventory, and parses those exact bytes. A stale, missing, symlinked, non-Ruby, unreadable or invalid spec aborts the plan rather than being treated as hazard-free.
+
+```ruby
+plan = Cleave::Guardrails.plan(
+  root: Dir.pwd, baseline: baseline, current: current, index: index,
+  current_specs: all_current_spec_paths,
+  previous_failures: previous_failed_spec_paths # nil means unavailable, [] means known empty
+)
+p plan.mandatory_mask                  # Prism hazard bits, current spec positions
+p plan.previous_failure_mask           # previous failure bits, current spec positions
+p plan.root_mask                       # full supplied suite if a recorded root path changed
+p plan.guardrailed_candidate_specs      # preview only; masks are ORed, not summed
+p plan.fallback_reasons
+```
+
+The plan preserves overlapping reasons, hazard locations and unmatched previous-failure paths. The supplied previous-failure list is not independently verified or persisted by this API; missing or unmatched results are explicitly flagged. Root changes select the whole supplied universe in the preview. As before, the universe must be independently discovered, v1 indexes are incomplete, and the plan **always requires a full-suite fallback and is not execution-ready**. Neither the guardrailed preview nor the supplied list is authorization to skip tests. Parallel RSpec dispatch, persisted run outcomes, and failure propagation remain separate work.
