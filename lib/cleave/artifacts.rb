@@ -90,6 +90,7 @@ module Cleave
       normalized.each do |path|
         absolute = root
         missing = false
+        stat = nil
         path.split("/").each do |part|
           absolute = File.join(absolute, part)
           begin
