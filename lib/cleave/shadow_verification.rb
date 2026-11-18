@@ -2,6 +2,7 @@
 
 require "open3"
 require_relative "guardrails"
+require_relative "index_provenance"
 
 module Cleave
   # Diagnostic comparison only: never authorizes selective execution.
@@ -9,14 +10,14 @@ module Cleave
     module_function
 
     def prepare(root:, files:)
-      baseline, index = Artifacts.read(File.join(root, ".cleave"))
+      baseline, index, provenance = IndexProvenance.read_pair(root: root)
       if baseline.files.keys.any? { |path| path == ".cleave" || path.start_with?(".cleave/") }
         raise ArtifactError, "baseline inventory must not include .cleave state"
       end
       current = capture(root, baseline.files.keys + files)
       plan = Guardrails.plan(root: root, baseline: baseline, current: current, index: index,
                              current_specs: files, previous_failures: nil)
-      [current, plan]
+      [current, plan, provenance]
     end
 
     # Capture tracked and non-ignored files, plus baseline and discovered paths.
@@ -32,7 +33,7 @@ module Cleave
       raise ArtifactError, "cannot invoke git: #{error.message}"
     end
 
-    def finish(root:, files:, current:, plan:, state:, observed_specs:)
+    def finish(root:, files:, current:, plan:, state:, observed_specs:, provenance: { "status" => "unavailable" })
       errors = []
       errors << "RSpec reports were incomplete." unless state["reports_complete"]
       errors << "RSpec reported examples outside the discovered files." unless (observed_specs - files).empty?
@@ -49,7 +50,7 @@ module Cleave
         "observed_missed_failure_specs" => misses.sort, "errors" => errors,
         "inventory_fingerprint" => current.fingerprint, "fallback_reasons" => plan.fallback_reasons,
         "union_nanoseconds" => plan.selection.union_nanoseconds,
-        "previous_failures_available" => false, "suite_coverage_verified" => false }
+        "previous_failures_available" => false, "suite_coverage_verified" => false, "provenance_status" => provenance.fetch("status") }
     end
   end
 end
