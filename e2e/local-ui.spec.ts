@@ -38,19 +38,18 @@ test('local UI shows fetch errors without substituting fixture data', async ({ p
 
 test('packaged loopback server renders real artifacts under its content policy', async ({ page }) => {
   test.skip(process.env.CLEAVE_REAL_UI !== '1', 'Requires Ruby and Bundler');
-  const { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, rmSync } = await import('node:fs');
+  const { mkdtempSync, mkdirSync, copyFileSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join, resolve } = await import('node:path');
-  const { spawn, spawnSync } = await import('node:child_process');
+  const { spawn } = await import('node:child_process');
   const project = mkdtempSync(join(tmpdir(), 'cleave-browser-'));
   let child: ReturnType<typeof spawn> | undefined;
   try {
     mkdirSync(join(project, '.cleave'));
     for (const name of ['inventory.json', 'bitmap_index.json']) copyFileSync(resolve(files, name), join(project, '.cleave', name));
-    writeFileSync(join(project, 'Gemfile'), `source 'https://rubygems.org'\ngem 'cleave-ste', path: ${JSON.stringify(resolve('.'))}\n`);
-    const lock = spawnSync('bundle', ['lock', '--local'], { cwd:project, encoding:'utf8' });
-    if (lock.status !== 0) throw new Error(`bundle lock failed: ${lock.stdout} ${lock.stderr}`);
-    child = spawn('bundle', ['exec', 'cleave', 'ui', '--no-open'], { cwd:project, stdio:['ignore','pipe','pipe'] });
+    child = spawn('bundle', ['exec', 'cleave', 'ui', '--no-open'], {
+      cwd:project, stdio:['ignore','pipe','pipe'], env:{ ...process.env, BUNDLE_GEMFILE:resolve('Gemfile') },
+    });
     const proc = child;
     const url = await new Promise<string>((resolveUrl, reject) => {
       let output = '';
