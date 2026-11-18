@@ -2,6 +2,8 @@
 
 require "minitest/autorun"
 require "cleave"
+require "cleave/ui_server"
+require "net/http"
 require "tmpdir"
 require "fileutils"
 require "stringio"
@@ -90,6 +92,44 @@ class DiagnosticPlanTest < Minitest::Test
     json = JSON.parse(stdout)
     assert_equal "cleave.diagnostic_plan", json.fetch("schema")
     assert_equal before, File.binread(File.join(@root, ".cleave/last_run.json"))
+  end
+
+  def test_local_ui_plan_serves_real_immutable_snapshot_with_same_artifacts
+    write("a.json", "changed")
+    server = Cleave::UIServer.new(root: @root, plan: true, output: StringIO.new)
+    thread = Thread.new { server.start }
+    begin
+      uri = URI(server.url)
+      http = Net::HTTP.new(uri.host, uri.port, nil)
+      html = http.get(uri.path)
+      assert_includes html.body, 'name="cleave-local-plan"'
+      response = http.get(uri.path + "artifacts/plan.json")
+      assert_equal "200", response.code
+      plan = JSON.parse(response.body)
+      inventory = JSON.parse(http.get(uri.path + "artifacts/inventory.json").body)
+      assert_equal inventory["fingerprint"], plan["baseline_fingerprint"]
+      assert_includes plan.dig("changes", "modified"), "a.json"
+      assert_equal false, plan["execution_ready"]
+      assert_includes plan["decisions"].find { |item| item["spec"] == "spec/a_spec.rb" }["bitmap_sources"], "a.json"
+      write("a.json", "changed again")
+      assert_equal response.body.b, http.get(uri.path + "artifacts/plan.json").body.b
+      assert_equal "404", http.get("/artifacts/plan.json").code
+      request = Net::HTTP::Get.new(uri.path + "artifacts/plan.json")
+      request["Origin"] = "https://evil.example"
+      assert_equal "403", http.request(request).code
+    ensure
+      server.shutdown
+      thread.join(5)
+    end
+  end
+
+  def test_expected_artifact_bytes_prevent_same_inventory_index_mix
+    inventory_path = File.join(@root, ".cleave/inventory.json")
+    index_path = File.join(@root, ".cleave/bitmap_index.json")
+    expected = [Digest::SHA256.file(inventory_path).hexdigest, Digest::SHA256.file(index_path).hexdigest]
+    File.write(index_path, File.read(index_path) + " ") # Same parsed index and inventory fingerprint, different bytes.
+    assert_match(/artifact pair changed/, assert_raises(Cleave::ArtifactError) { build(expected_artifacts: expected) }.message)
+    assert_raises(ArgumentError) { Cleave::UIServer.new(root: @root, includes: ["a.json"]) }
   end
 
   def test_missing_invalid_symlink_artifacts_and_busy_lock_are_rejected

@@ -48,9 +48,15 @@ With a matching artifact pair in the project's `.cleave/` directory, run:
 bundle exec cleave ui                 # opens a browser when supported
 bundle exec cleave ui --no-open       # print URL for manual opening
 bundle exec cleave ui --port 4321     # optional fixed loopback port
+bundle exec cleave ui --plan --no-open # compute and display a diagnostic project plan
+bundle exec cleave ui --plan --include ignored/current_spec.rb # optional ignored input
 ```
 
 The gem includes a prebuilt workbench; no Node runtime is required. The command validates and captures both files at startup and opens the artifact inspector with that **startup snapshot**. Restart the server to refresh it. If files are absent, invalid, symlinked, or over 10 MiB, startup fails rather than showing demo data. The importer can also load a separate pair manually; the simulator remains explicitly separate. The v1 artifacts remain incomplete and cannot authorize skipping tests.
+
+With `--plan`, the server first computes a diagnostic plan using the same dry-run discovery and current-file checks as `cleave plan`. **RSpec dry-run loads spec files and may have side effects.** This is opt-in: ordinary `cleave ui` does not run discovery. Planning requires the Git project root, a project bundle and a valid artifact pair; failure aborts startup rather than showing a simulated result. Repeat `--include PATH` to include ignored current files. The exact artifact bytes used for planning must match the pair loaded by the server, even if two indexes have the same inventory fingerprint.
+
+The plan view shows changed paths, discovered specs, candidate reasons, Prism hazards and coverage limitations as a separate startup snapshot. Click a changed path to filter related specs, or switch to the artifact inspector or simulator. Restart the CLI after changes to refresh; changes after startup are not reflected. The candidate is **not an execution list** and the configured full suite remains mandatory. Source, live execution, previous failures and shadow audit results are not supplied by this view. The Git snapshots are nontransactional, artifact provenance is unverified, and discovered specs do not prove suite coverage.
 
 The read-only server binds only `127.0.0.1`, chooses an available port by default, serves only packaged assets and the two captured artifacts, checks the Host/Origin, and uses a random per-run URL capability. **Do not share the printed URL**; anyone with local access and that URL can read the captured artifacts. It is not intended for public/network exposure, hostile local users, or reverse proxies. Stop it with Ctrl-C. Browser launch is best-effort; use the printed URL if it cannot open automatically. Rebuild packaged assets for development with `npm ci && npm run build:gem-ui`; the `public/` directory is generated and checked in so gem users do not need Node.
 
@@ -194,7 +200,7 @@ The command emits a versioned `cleave.diagnostic_plan` JSON object to standard o
 
 Git tracked/non-ignored files, baseline paths and repeatable explicit `--include` paths are captured before and after discovery and planning. Include ignored new specs or dependencies explicitly; missing or symlinked includes, invalid artifacts, empty or failed discovery, and detected changes abort with a nonzero status and no JSON plan. These checks are not transactional and cannot detect reverted changes, unlisted ignored files or external dependencies. The baseline pair may itself be stale; check the latest indexing run before relying on it as an observation. Matching fingerprints are not provenance. The discovered list is not proof of suite coverage.
 
-**The candidate is only a diagnostic preview**, not a runnable test list: `requires_full_suite` is true and `execution_ready` is false. Continue running the configured full suite. This JSON is not yet connected to the workbench; the simulator and artifact inspector remain separate.
+**The candidate is only a diagnostic preview**, not a runnable test list: `requires_full_suite` is true and `execution_ready` is false. Continue running the configured full suite. Use `cleave ui --plan` to view a separately computed startup plan in the workbench; the simulator and artifact inspector remain separate.
 
 ## Guardrail planning
 

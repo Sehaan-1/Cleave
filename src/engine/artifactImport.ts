@@ -17,7 +17,7 @@ export interface ImportedArtifacts {
 }
 
 function fail(message: string): never { throw new Error(message); }
-function parseStrict(text: string, name: string): unknown {
+export function parseStrict(text: string, name: string): unknown {
   if (utf8ToBytes(text).length > MAX_ARTIFACT_BYTES) fail(`${name} exceeds the 10 MiB limit.`);
   const errors: ParseError[] = [];
   const tree = parseTree(text, errors, { disallowComments: true, allowTrailingComma: false });
@@ -37,17 +37,17 @@ function parseStrict(text: string, name: string): unknown {
   }
   try { return JSON.parse(text) as unknown; } catch { return fail(`${name} is not valid JSON.`); }
 }
-function object(value: unknown, keys: string[], label: string): Record<string, unknown> {
+export function object(value: unknown, keys: string[], label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail(`${label} must be an object.`);
   const o = value as Record<string, unknown>;
   if (Object.keys(o).length !== keys.length || keys.some(k => !Object.hasOwn(o, k))) fail(`${label} has unexpected or missing fields.`);
   return o;
 }
-function validString(value: unknown, label: string): string {
+export function validString(value: unknown, label: string): string {
   if (typeof value !== "string" || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value)) fail(`${label} must be a valid Unicode string.`);
   return value as string;
 }
-function path(value: unknown): string {
+export function path(value: unknown): string {
   const s = validString(value, "Path");
   if (!s || s.startsWith("/") || s.includes("\\") || s.includes("\0") || s.split("/").some(p => !p || p === "." || p === ".." || p === ".git")) fail(`Invalid repository-relative path: ${JSON.stringify(s)}`);
   return s;
@@ -58,11 +58,11 @@ function compare(a: string, b: string): number {
   for (let i = 0; i < Math.min(aa.length, bb.length); i++) if (aa[i] !== bb[i]) return aa[i] - bb[i];
   return aa.length - bb.length;
 }
-function sortedUnique(values: string[], label: string): void {
+export function sortedUnique(values: string[], label: string): void {
   for (let i = 1; i < values.length; i++) if (compare(values[i - 1], values[i]) >= 0) fail(`${label} must be sorted and unique.`);
 }
-function array(value: unknown, label: string): unknown[] { return Array.isArray(value) ? value : fail(`${label} must be an array.`); }
-function digest(value: unknown, label: string): string {
+export function array(value: unknown, label: string): unknown[] { return Array.isArray(value) ? value : fail(`${label} must be an array.`); }
+export function digest(value: unknown, label: string): string {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) fail(`${label} must be a lowercase SHA-256 digest.`);
   return value as string;
 }

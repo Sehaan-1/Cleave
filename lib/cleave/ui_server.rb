@@ -4,6 +4,7 @@ require "webrick"
 require "securerandom"
 require "rbconfig"
 require_relative "artifacts"
+require_relative "diagnostic_plan"
 
 module Cleave
   # Read-only, loopback-only server for a validated immutable artifact snapshot.
@@ -16,8 +17,10 @@ module Cleave
 
     attr_reader :url, :port
 
-    def initialize(root:, port: 0)
+    def initialize(root:, port: 0, plan: false, includes: [], output: $stderr)
       raise ArgumentError, "port must be an integer from 0 to 65535" unless port.is_a?(Integer) && port.between?(0, 65_535)
+      raise ArgumentError, "plan must be true or false" unless [true, false].include?(plan)
+      raise ArgumentError, "includes require a plan" unless includes.is_a?(Array) && (plan || includes.empty?)
       root = File.realpath(root)
       state = File.join(root, ".cleave")
       raise ArtifactError, ".cleave must be a real directory, not a symlink" if File.symlink?(state) || !File.directory?(state)
@@ -25,15 +28,24 @@ module Cleave
       index_text = read_artifact(File.join(state, "bitmap_index.json"))
       inventory = Inventory.load(inventory_text)
       BitmapIndex.load(index_text, inventory: inventory)
+      plan_text = nil
+      if plan
+        expected = [Digest::SHA256.hexdigest(inventory_text), Digest::SHA256.hexdigest(index_text)]
+        plan_text = JSON.generate(DiagnosticPlan.build(root: root, includes: includes, output: output, expected_artifacts: expected))
+        raise ArtifactError, "diagnostic plan exceeds 10 MiB" if plan_text.bytesize > MAX_ARTIFACT_BYTES
+        plan_text.freeze
+      end
       public_dir = File.expand_path("../../public", __dir__)
       index_path = File.join(public_dir, "index.html")
       raise ArtifactError, "packaged workbench assets are missing; rebuild or reinstall the gem" unless File.file?(index_path)
       html = File.binread(index_path)
       raise ArtifactError, "invalid packaged workbench" unless html.include?("</head>")
       html = html.sub("</head>", "<meta name=\"cleave-local-ui\" content=\"1\"></head>")
+      html = html.sub("</head>", "<meta name=\"cleave-local-plan\" content=\"1\"></head>") if plan
       @responses = { "" => ["text/html; charset=utf-8", html],
                      "artifacts/inventory.json" => ["application/json; charset=utf-8", inventory_text],
                      "artifacts/bitmap_index.json" => ["application/json; charset=utf-8", index_text] }
+      @responses["artifacts/plan.json"] = ["application/json; charset=utf-8", plan_text] if plan
       assets = File.join(public_dir, "assets")
       raise ArtifactError, "packaged workbench assets are missing" unless File.directory?(assets) && !File.symlink?(assets)
       Dir.children(assets).sort.each do |name|

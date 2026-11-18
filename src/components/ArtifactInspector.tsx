@@ -9,7 +9,7 @@ async function readArtifact(file: File): Promise<string> {
   try { return new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer()); }
   catch { throw new Error(`${file.name} could not be read as UTF-8.`); }
 }
-export function ArtifactInspector({ onBack, compact, localMode = false }: { onBack: () => void; compact: boolean; localMode?: boolean }) {
+export function ArtifactInspector({ onBack, onPlan, compact, localMode = false }: { onBack: () => void; onPlan?: () => void; compact: boolean; localMode?: boolean }) {
   const [inventoryFile, setInventoryFile] = useState<File | null>(null);
   const [indexFile, setIndexFile] = useState<File | null>(null);
   const [data, setData] = useState<ImportedArtifacts | null>(null);
@@ -72,7 +72,7 @@ export function ArtifactInspector({ onBack, compact, localMode = false }: { onBa
     } finally { if (token === request.current) setBusy(false); }
   }
   return <div className="artifact-frame">
-    <header className="artifact-header"><div className="brand"><span aria-hidden="true">//</span>CLEAVE</div><span className="artifact-header-title">Artifact inspector</span><span className="artifact-local">{source === "project" ? "Project snapshot · loopback" : "Local files only"}</span><button type="button" onClick={onBack}><ArrowLeft size={14}/> Simulator</button></header>
+    <header className="artifact-header"><div className="brand"><span aria-hidden="true">//</span>CLEAVE</div><span className="artifact-header-title">Artifact inspector</span><span className="artifact-local">{source === "project" ? "Project snapshot · loopback" : "Local files only"}</span>{onPlan && <button type="button" onClick={onPlan}>Project plan</button>}<button type="button" onClick={onBack}><ArrowLeft size={14}/> Simulator</button></header>
     <div className="artifact-warning"><ShieldAlert size={16}/><span><strong>Incomplete index.</strong> Recorded observations only. Never use this data to skip tests.</span></div>
     <section className="artifact-import" aria-label="Import artifact pair">
       <div className="artifact-intro"><span className="eyebrow">Artifact pair · v1</span><h1>Inspect real observations</h1><p>{source === "project" ? "Showing the CLI’s startup snapshot. Restart the CLI to refresh; or import another pair below." : "Choose the inventory and bitmap index produced together by Cleave. Files stay in this browser."}</p></div>
