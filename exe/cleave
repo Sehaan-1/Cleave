@@ -10,7 +10,7 @@ trace = false
 index = false
 includes = []
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify | --trace [--index [--include PATH]]]\n       bundle exec cleave graph --output FILE.html\n       bundle exec cleave ui [--port N] [--no-open]"
+  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify | --trace [--index [--include PATH]]]\n       bundle exec cleave plan [--include PATH]\n       bundle exec cleave graph --output FILE.html\n       bundle exec cleave ui [--port N] [--no-open]"
   opts.on("--workers N", Integer, "Run the configured full suite in N file workers (default: 1)") { |value| workers = value }
   opts.on("--index", "Build diagnostic artifacts from this traced run (requires --trace)") { index = true }
   opts.on("--include PATH", "Include an ignored file in the inventory (repeatable; requires --index)") { |value| includes << value }
@@ -38,6 +38,20 @@ begin
     $stdout.flush
     server.open_browser if open_browser
     server.start
+    exit 0
+  end
+  if ARGV.first == "plan"
+    ARGV.shift
+    plan_includes = []
+    plan_parser = OptionParser.new do |opts|
+      opts.banner = "Usage: bundle exec cleave plan [--include PATH]"
+      opts.on("--include PATH", "Include an ignored current file (repeatable)") { |value| plan_includes << value }
+      opts.on("-h", "--help", "Show help") { puts opts; exit 0 }
+    end
+    plan_parser.parse!(ARGV)
+    raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
+    plan = Cleave::DiagnosticPlan.build(root: Dir.pwd, includes: plan_includes, output: $stderr)
+    puts JSON.pretty_generate(plan)
     exit 0
   end
   if ARGV.first == "graph"
