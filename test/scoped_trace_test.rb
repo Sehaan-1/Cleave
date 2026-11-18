@@ -73,6 +73,24 @@ class ScopedTraceTest < Minitest::Test
     $cleave_trace_loads = nil
   end
 
+
+  def test_load_path_requires_and_unresolved_require_failures
+    feature = "cleave_trace_fixture_#{Process.pid}"
+    path = File.join(@root, "#{feature}.rb")
+    File.write(path, "$cleave_trace_fixture = true\n")
+    $LOAD_PATH.unshift(@root)
+    @trace.with_spec("spec/load_path_spec.rb") do
+      assert require(feature)
+      refute require(feature)
+      assert_raises(LoadError) { require("#{feature}_missing") }
+    end
+    assert observed?("spec/load_path_spec.rb", "#{feature}.rb", "require")
+  ensure
+    $LOAD_PATH.delete(@root)
+    $LOADED_FEATURES.delete(path)
+    $cleave_trace_fixture = nil
+  end
+
   def test_scopes_are_isolated_for_concurrent_threads_and_fibers
     threads = %w[a b].map do |name|
       Thread.new do
