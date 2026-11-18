@@ -2,8 +2,8 @@
 
 The Ruby engine is built in independently reviewable slices. This sequence supplements the workbench delivery ledger; none of the later slices is implied by the static pass.
 
-1. **Static Prism pass**: parse Ruby files without executing them; return located constant definitions/references, literal `require_relative` edges and hazard facts. Mark matching spec files mandatory. Fail closed on parse/I/O errors. This is the current slice.
-2. **Scoped tracing**: define isolation and recording semantics, hook actual runtime reads/requires, preserve root/test attribution and handle parallelism and incomplete traces safely.
+1. **Static Prism pass**: parse Ruby files without executing them; return located constant definitions/references, literal `require_relative` edges and hazard facts. Mark matching spec files mandatory. Fail closed on parse/I/O errors. Delivered.
+2. **Scoped tracing**: define isolation and recording semantics, hook actual runtime reads/requires, preserve root/test attribution and handle parallelism and incomplete traces safely. This slice exposes process-local observations and explicit limitations; automatic child aggregation and runner integration are future work.
 3. **Inventory and bitmap index**: content hashes, stable test identities, versioned persisted artifacts and schema validation, covering additions/deletions and incomplete data.
 4. **Selection**: compare inventories and OR bitmaps with explicit safety behavior and attribution; measure performance on real data.
 5. **Guardrails and execution**: carry forward failed tests, AST hazards, root fallback, safe worker dispatch and failure propagation.

@@ -57,3 +57,27 @@ end
 `scan` visits `.rb` files in sorted path order, skipping symlinks, `.git` and `node_modules`. Parse or I/O errors abort rather than returning an incomplete result. `analyze(source, path:, spec: nil)` handles a single file; by default only `spec/**/*_spec.rb` files are classified as specs, and callers can override `spec:` explicitly. Fact locations are one-based lines, zero-based **byte** columns, and byte lengths. Definitions and constant references are syntactic facts with lexical nesting, not resolved Ruby constants. Literal `require_relative` edges expose the path normalized relative to the source file without guessing an extension or requiring it to exist. Dynamic `require_relative`, `Dir.glob`, `Dir[]`, `Dir.entries`, `Dir.children`, `const_get`, eval variants and dynamic sends are conservatively recorded as hazards; hazards only make a file mandatory when it is classified as a spec.
 
 This slice does **not** yet resolve the transitive constant graph, trace runtime opens, hash inventories, select or run tests, export artifacts, or prove absence of false negatives. Static facts alone cannot safely cover Ruby's dynamic behavior; do not use this slice by itself to skip tests. The UI remains a fixture-driven simulation.
+
+## Scoped Ruby access tracing
+
+This slice adds an opt-in, process-local observation API; it is **not** yet wired to RSpec, persisted artifacts, or selection:
+
+```ruby
+require "cleave"
+trace = Cleave::ScopedTrace.start(root: Dir.pwd)
+begin
+  # Load the test harness here: observations go to root scope "r".
+  trace.with_spec("spec/services/payout_spec.rb") do
+    # Execute this spec file here. Nested scopes are restored even on exceptions.
+  end
+ensure
+  report = trace.stop
+end
+p report.to_h
+```
+
+The recorder observes Ruby-level `File.open`, `IO.read` / `IO.binread` (including inherited `File.read` / `File.binread`), `YAML.load_file`, and successful or cached `Kernel.require`. It records deduplicated `attempt` and `success` events, including failed read attempts, so an absent path is not silently discarded. Successful requires are resolved against loaded features and the load path; unresolved features produce a limitation instead of a fabricated path. Paths inside the chosen root are relative to it; outside paths are absolute. They are lexically normalized, not realpath-resolved, so symlink aliases are not collapsed. Opens for writing are conservatively included. Event scope is `r` or the supplied spec name.
+
+Hooks are installed process-wide once and are dormant after `stop`. Only one session may be active per process. Scope stacks are **fiber-local**: new threads and fibers default to root until explicitly wrapped with `with_spec`. A fork receives a copy of the session; the parent does not receive child events automatically. Collect the child's `report.to_h` over IPC before it exits and retain it separately with the parent's report. The report includes its PID. Traces must be captured over the entire intended boot and test run; loading Cleave itself occurs before capture starts.
+
+**Safety:** `complete` is always false. Ruby-level hooks cannot see native extensions, direct syscalls, subprocesses, all IO APIs, directory probes, or `require_relative` reliably. Unscoped concurrent work and uncollected children are also incomplete. A failed `require` is not recorded as a file dependency. A trace must never be used alone to skip tests. Later slices must define conservative fallback, process aggregation, schema and runner integration before any selection is safe.
