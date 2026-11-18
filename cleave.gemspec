@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
   spec.authors = ["Cleave contributors"]
   spec.license = "Apache-2.0"
   spec.required_ruby_version = ">= 3.2"
-  spec.files = Dir["lib/**/*.rb", "exe/*", "LICENSE", "README.md"]
+  spec.files = Dir["lib/**/*.rb", "lib/cleave/graph_template.html", "exe/*", "LICENSE", "README.md"]
   spec.bindir = "exe"
   spec.executables = ["cleave"]
   spec.require_paths = ["lib"]
