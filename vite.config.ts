@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   base: "./",
+  publicDir: false,
   plugins: [react(), tailwindcss()],
   build: {
     rollupOptions: {

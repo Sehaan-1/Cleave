@@ -7,12 +7,33 @@ require "cleave"
 workers = 1
 verify = false
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify]\n       bundle exec cleave graph --output FILE.html"
+  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify]\n       bundle exec cleave graph --output FILE.html\n       bundle exec cleave ui [--port N] [--no-open]"
   opts.on("--workers N", Integer, "Run the configured full suite in N file workers (default: 1)") { |value| workers = value }
   opts.on("--verify", "Compare a diagnostic preview with the full suite (one worker)") { verify = true }
   opts.on("-h", "--help", "Show help") { puts opts; exit 0 }
 end
 begin
+  if ARGV.first == "ui"
+    ARGV.shift
+    port = 0
+    open_browser = true
+    ui_parser = OptionParser.new do |opts|
+      opts.banner = "Usage: bundle exec cleave ui [--port N] [--no-open]"
+      opts.on("--port N", Integer, "Loopback port (default: an available port)") { |value| port = value }
+      opts.on("--no-open", "Print the URL without launching a browser") { open_browser = false }
+      opts.on("-h", "--help", "Show help") { puts opts; exit 0 }
+    end
+    ui_parser.parse!(ARGV)
+    raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
+    require "cleave/ui_server"
+    server = Cleave::UIServer.new(root: Dir.pwd, port: port)
+    puts "Cleave workbench: #{server.url}"
+    puts "Loopback only; artifact snapshot is incomplete. Press Ctrl-C to stop."
+    $stdout.flush
+    server.open_browser if open_browser
+    server.start
+    exit 0
+  end
   if ARGV.first == "graph"
     ARGV.shift
     destination = nil

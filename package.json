@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:gem-ui": "npm run build && node scripts/package-ui.mjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8",
