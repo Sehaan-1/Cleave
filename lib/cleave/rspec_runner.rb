@@ -8,6 +8,7 @@ require "tempfile"
 require "set"
 require_relative "artifacts"
 require_relative "shadow_verification"
+require_relative "telemetry"
 
 module Cleave
   class RunnerError < StandardError; end
@@ -42,10 +43,11 @@ module Cleave
     end
 
     def execute(root, state_dir, status_path, workers, output, verify)
+      started = Telemetry.now
       state = { "schema" => STATUS_SCHEMA, "version" => STATUS_VERSION, "outcome" => "running",
                 "requested_workers" => workers, "actual_workers" => 0, "exit_code" => nil,
                 "observed_failed_specs" => [], "reports_complete" => false, "suite_coverage_verified" => false,
-                "example_count" => 0, "errors" => [] }
+                "example_count" => 0, "errors" => [], "telemetry" => Telemetry.initial }
       state["verification"] = { "status" => "running" } if verify
       write_state(status_path, state)
       children = []
@@ -55,12 +57,14 @@ module Cleave
           if verify
             begin
               verification_files = discover(root, temp, output, children)
+              state["telemetry"]["discovered_spec_files"] = verification_files.length
               current, plan = ShadowVerification.prepare(root: root, files: verification_files)
             rescue StandardError => error
               state["verification"] = { "status" => "incomplete", "errors" => ["#{error.class}: #{error.message}"] }
             end
           end
           files = workers > 1 ? discover(root, temp, output, children) : nil
+          state["telemetry"]["discovered_spec_files"] = files.length if files
           before = files && Inventory.capture(root: root, paths: files)
           raise RunnerError, "Discovered spec files are missing." if files && before.files.keys != files
           groups = if files.nil? || files.empty?
@@ -70,6 +74,7 @@ module Cleave
             files.each_with_index.each_with_object(Array.new(count) { [] }) { |(path, id), groups| groups[id % count] << path }
           end
           state["actual_workers"] = groups.length
+          worker_started = Telemetry.now
           jobs = groups.each_with_index.map do |group, i|
             json = File.join(temp, "worker-#{i}.json")
             log = File.join(temp, "worker-#{i}.log")
@@ -89,6 +94,7 @@ module Cleave
             stream_log(log, output, groups.length > 1 ? "worker #{jobs.index { |item| item[0] == pid } + 1}" : nil)
             parse_report(root, json, status, group, state, seen_examples, seen_specs)
           end
+          state["telemetry"]["worker_collection_elapsed_ns"] = Telemetry.now - worker_started
           if files
             after = Inventory.capture(root: root, paths: files)
             state["errors"] << "Spec files changed during the parallel run." unless after.fingerprint == before.fingerprint
@@ -115,6 +121,7 @@ module Cleave
         state["outcome"] = "incomplete"
         state["exit_code"] = 130
         state["errors"] << "Run interrupted."
+        state["telemetry"]["runner_elapsed_ns"] = Telemetry.now - started
         write_state(status_path, state)
         raise
       rescue StandardError => error
@@ -127,6 +134,7 @@ module Cleave
         terminate(children)
       end
       state["observed_failed_specs"] = state["observed_failed_specs"].uniq.sort
+      state["telemetry"]["runner_elapsed_ns"] = Telemetry.now - started
       write_state(status_path, state)
       state
     end
@@ -191,6 +199,7 @@ module Cleave
         raise RunnerError, "inconsistent RSpec report counts"
       end
       failures = []
+      counts = Hash.new(0)
       examples.each do |example|
         unless example.is_a?(Hash) && %w[passed failed pending].include?(example["status"]) && example["id"].is_a?(String) && !example["id"].empty?
           raise RunnerError, "invalid RSpec example"
@@ -199,11 +208,14 @@ module Cleave
         raise RunnerError, "example outside assigned worker files: #{spec}" if group && !group.include?(spec)
         raise RunnerError, "duplicate RSpec example: #{example['id']}" unless seen_examples.add?(example["id"])
         seen_specs.add(spec)
+        counts[example["status"]] += 1
         failures << spec if example["status"] == "failed"
       end
       raise RunnerError, "inconsistent RSpec failure count" unless failures.length == failed
       state["observed_failed_specs"].concat(failures)
       state["example_count"] += total
+      %w[passed failed pending].each { |key| state["telemetry"]["#{key}_examples"] += counts[key] }
+      state["telemetry"]["reported_spec_files"] = seen_specs.length
       state["errors"] << "RSpec reported #{outside} error(s) outside examples." if outside.positive?
       if !status.exited? || (status.success? && (failed.positive? || outside.positive?)) || (!status.success? && failed.zero? && outside.zero?)
         state["errors"] << "RSpec exited without a consistent example result (#{status.exitstatus || 'signal'})."
