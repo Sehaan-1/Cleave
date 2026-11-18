@@ -5,18 +5,26 @@ require "optparse"
 require "cleave"
 
 workers = 1
+verify = false
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: bundle exec cleave [run] [--workers N]"
+  opts.banner = "Usage: bundle exec cleave [run] [--workers N] [--verify]"
   opts.on("--workers N", Integer, "Run the configured full suite in N file workers (default: 1)") { |value| workers = value }
+  opts.on("--verify", "Compare a diagnostic preview with the full suite (one worker)") { verify = true }
   opts.on("-h", "--help", "Show help") { puts opts; exit 0 }
 end
 begin
   ARGV.shift if ARGV.first == "run"
   parser.parse!(ARGV)
   raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(' ')}" unless ARGV.empty?
-  result = Cleave::RSpecRunner.run(root: Dir.pwd, workers: workers)
+  result = Cleave::RSpecRunner.run(root: Dir.pwd, workers: workers, verify: verify)
   puts "\nCleave: #{result['outcome']} · #{result['example_count']} examples · #{result['actual_workers']} worker(s)"
   warn result["errors"].join("\n") unless result["errors"].empty?
+  if verify
+    audit = result.fetch("verification")
+    puts "Shadow verification: #{audit.fetch('status')} (diagnostic only; suite coverage not verified)"
+    puts "Observed missed failure specs: #{audit['observed_missed_failure_specs'].join(', ')}" if audit["observed_missed_failure_specs"]&.any?
+    warn audit.fetch("errors", []).join("\n") unless audit.fetch("errors", []).empty?
+  end
   exit result.fetch("exit_code")
 rescue Interrupt
   warn "Cleave: interrupted"
