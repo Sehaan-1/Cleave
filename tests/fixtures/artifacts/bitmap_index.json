@@ -1,0 +1,26 @@
+{
+  "schema": "cleave.bitmap_index",
+  "version": 1,
+  "inventory_fingerprint": "d2b402386ff0dce879e6bd2d0f53b3be9b0b364246633bac10c86e8c9f98e7ed",
+  "specs": [
+    "spec/alpha_spec.rb",
+    "spec/beta_spec.rb"
+  ],
+  "masks": [
+    {
+      "path": "app/服务.rb",
+      "hex": "0x3"
+    },
+    {
+      "path": "config/missing.json",
+      "hex": "0x2"
+    }
+  ],
+  "root_paths": [
+    "config/boot.yml"
+  ],
+  "limitations": [
+    "Partial trace: missing native and child process access."
+  ],
+  "complete": false
+}
