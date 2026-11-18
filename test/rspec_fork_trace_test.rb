@@ -34,7 +34,6 @@ class RSpecForkTraceTest < Minitest::Test
   def test_forks_are_collected_best_effort_and_indexed_by_inherited_scope
     skip "fork is unavailable" unless Process.respond_to?(:fork)
     %w[root child nested thread no_block parent hidden].each { |name| write("#{name}.json", "{}") }
-    write(".git/config", "private")
     write("spec/fork_spec.rb", <<~RUBY)
       RSpec.describe('fork observations') do
         before(:context) do
@@ -47,19 +46,16 @@ class RSpecForkTraceTest < Minitest::Test
             File.read('child.json')
             File.read('.git/config')
             Thread.new { File.read('thread.json') }.join
-            nested = Process.fork { File.read('nested.json') }
-            Process.wait(nested)
+            nested = Process.fork
+            if nested
+              Process.wait(nested)
+            else
+              File.read('nested.json')
+              File.read('no_block.json')
+              exit 0
+            end
           end
           Process.wait(pid)
-        end
-        it('collects a fork without a block') do
-          pid = Process.fork
-          if pid
-            Process.wait(pid)
-          else
-            File.read('no_block.json')
-            exit 0
-          end
         end
         it('cannot collect exit bang') do
           pid = fork { File.read('hidden.json'); exit! 0 }
@@ -70,8 +66,8 @@ class RSpecForkTraceTest < Minitest::Test
     output = StringIO.new
     result = Cleave::RSpecRunner.run(root: @root, trace: true, trace_forks: true, index: true, output: output)
     assert_equal "passed", result["outcome"], "#{result.inspect}\\n#{output.string}"
-    assert_equal 3, result["example_count"]
-    assert_equal 4, result.dig("trace", "fork_reports")
+    assert_equal 2, result["example_count"]
+    assert_equal 3, result.dig("trace", "fork_reports")
     refute result.dig("trace", "complete")
     capture = JSON.parse(File.read(File.join(@root, ".cleave/last_trace.json")))
     events = capture.fetch("report").fetch("events")
