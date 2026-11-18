@@ -189,7 +189,7 @@ These snapshots are not transactional: they cannot detect changes reverted durin
 
 ## Check artifact publication provenance
 
-Each `cleave run --trace --index` now atomically writes `.cleave/index_provenance.json` as `running` before the suite starts, and records exact SHA-256 digests of both artifact files only after both are published. Failures and interruptions mark the generation `incomplete`; abrupt termination may leave it `running`. Inspect the current pair with:
+Each `cleave run --trace --index` now atomically writes `.cleave/index_provenance.json` as `running` before the suite starts, and records exact SHA-256 digests of both artifact files only after both are published. Failures and interruptions normally mark the generation `incomplete`; abrupt termination or an I/O error may leave it `running`. Inspect the current pair with:
 
 ```sh
 bundle exec cleave provenance
