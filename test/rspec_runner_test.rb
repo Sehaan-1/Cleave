@@ -55,7 +55,7 @@ class RSpecRunnerTest < Minitest::Test
     spec("space name_check.rb", "RSpec.describe('b') { it('fails') { expect(1).to eq(2) } }\n")
     spec("ignored_spec.rb", "raise 'must not be loaded by this configured pattern'\n")
     result, output, persisted = run_suite(workers: 2)
-    assert_equal "failed", result["outcome"]
+    assert_equal "failed", result["outcome"], "#{result.inspect}\n#{output}"
     assert_equal 1, result["exit_code"]
     assert_equal 2, result["actual_workers"]
     assert_equal 2, result["example_count"]
