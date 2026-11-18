@@ -2,6 +2,7 @@
 
 require_relative "shadow_verification"
 require_relative "trace_capture"
+require_relative "index_provenance"
 
 module Cleave
   # Builds a diagnostic index from the same run whose project snapshots surround it.
@@ -31,7 +32,7 @@ module Cleave
       raise ArtifactError, "cannot access Git root: #{error.message}"
     end
 
-    def finish(root:, directory:, before:, includes:, report:, specs:)
+    def finish(root:, directory:, before:, includes:, report:, specs:, generation_id:, failed_examples:)
       after = ShadowVerification.capture(root, includes)
       raise ArtifactError, "project files changed during the traced run" unless before.fingerprint == after.fingerprint
       raise ArtifactError, "reported spec files absent from inventory; include ignored specs explicitly" unless (specs - before.files.keys).empty?
@@ -42,8 +43,9 @@ module Cleave
         raise ArtifactError, "artifact output must not be a symlink: #{name}" if File.symlink?(File.join(directory, name))
       end
       Artifacts.write(directory, inventory: before, index: index)
+      IndexProvenance.recorded(directory, id: generation_id, inventory: before, index: index, failed_examples: failed_examples)
       { "status" => "recorded", "complete" => false, "inventory_fingerprint" => before.fingerprint,
-        "spec_count" => index.specs.length, "path_count" => index.masks.length }
+        "spec_count" => index.specs.length, "path_count" => index.masks.length, "generation_id" => generation_id }
     end
   end
 end
