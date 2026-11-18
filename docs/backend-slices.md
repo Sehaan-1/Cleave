@@ -18,6 +18,7 @@ The Ruby engine is built in independently reviewable slices. This sequence suppl
 9d. **Best-effort fork observations**: opt-in collection of Ruby fork reports from one traced RSpec process, with inherited scope and explicit child-coverage limitations; no test skipping.
 10a. **Diagnostic project plan**: expose current Git inventory, RSpec dry-run discovery and guardrailed candidates as versioned JSON; no selective execution.
 9c. **Artifact publication provenance**: mark generation in progress/incomplete and bind both exact artifact byte streams to a local marker; do not infer authentication, freshness or coverage.
+10c. **Prior failure input**: opt in to use the latest internally consistent run record in the CLI diagnostic plan and workbench, with source digest and explicit unmatched paths; unsigned observations do not prove coverage and cannot authorize skipping.
 10b. **Local plan viewer**: opt in to compute and display a validated diagnostic startup plan in the loopback workbench, separate from simulator and artifact inspector; no selective execution.
 
 Exact boundaries and ordering may change as implementation constraints are discovered. A static AST is not evidence that a skipped test is safe.

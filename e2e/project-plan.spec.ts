@@ -32,6 +32,22 @@ test('project plan shows attribution and remains separate from artifacts and sim
   await expect(page.getByText('Browser simulator')).toBeVisible();
 });
 
+test('previous failures appear as diagnostic attribution and unmatched paths', async ({ page }) => {
+  const data = JSON.parse(plan); data.version = 2; data.previous_failures_available = true;
+  data.previous_failures_source_sha256 = 'a'.repeat(64);
+  data.unmatched_previous_failures = ['spec/deleted_spec.rb'];
+  data.fallback_reasons = data.fallback_reasons.filter((s: string) => s !== 'previous_failures_unavailable');
+  data.fallback_reasons.push('previous_failures_unmatched');
+  data.decisions[2].candidate = true; data.decisions[2].reasons.push('previous_failure');
+  data.candidate_specs.push(data.decisions[2].spec);
+  await mockPlan(page, JSON.stringify(data)); await page.goto('/');
+  await page.getByRole('button', { name: /spec\/gamma_spec.rb/ }).click();
+  await expect(page.getByText('Previous failure', { exact: true })).toBeVisible();
+  await expect(page.getByText('spec/deleted_spec.rb', { exact: true })).toBeVisible();
+  await expect(page.getByText('Latest run observations · unsigned, coverage unverified.')).toBeVisible();
+  await expect(page.getByText('Candidate specs are not an execution list.')).toBeVisible();
+});
+
 test('rejects invalid plan rather than showing fabricated results', async ({ page }) => {
   const invalid = JSON.parse(plan); invalid.execution_ready = true;
   await mockPlan(page, JSON.stringify(invalid)); await page.goto('/');
@@ -75,7 +91,7 @@ test('real loopback UI renders a freshly generated Ruby plan', async ({ page }) 
     run('bundle', ['lock', '--local']);
     run('bundle', ['exec', 'cleave', 'run', '--trace', '--index']);
     writeFileSync(join(project, 'data.json'), '{"changed":true}');
-    child = spawn('bundle', ['exec', 'cleave', 'ui', '--plan', '--no-open'], { cwd: project, stdio: ['ignore', 'pipe', 'pipe'], env });
+    child = spawn('bundle', ['exec', 'cleave', 'ui', '--plan', '--previous-failures', '--no-open'], { cwd: project, stdio: ['ignore', 'pipe', 'pipe'], env });
     const proc = child;
     const url = await new Promise<string>((resolveUrl, reject) => {
       let output = '';
@@ -92,6 +108,7 @@ test('real loopback UI renders a freshly generated Ruby plan', async ({ page }) 
     await expect(page.getByRole('button', { name: /data.json/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /spec\/real_spec.rb/ })).toBeVisible();
     await expect(page.getByText('Observed dependency')).toBeVisible();
+    await expect(page.getByText('Latest run observations · unsigned, coverage unverified.')).toBeVisible();
     await expect(page.getByText('Candidate specs are not an execution list.')).toBeVisible();
     expect(errors).toEqual([]);
   } finally {

@@ -13,11 +13,11 @@ module Cleave
     LIMITATIONS = [
       "RSpec dry-run discovery loads spec files and may have side effects; it does not verify suite coverage.",
       "Git-based snapshots are not transactional and cannot detect reverted changes or unlisted ignored files.",
-      "Previous failures were not supplied; the candidate is diagnostic and cannot authorize test skipping.",
       "Baseline artifacts can be stale or from another run; matching fingerprints do not establish provenance."
     ].freeze
 
-    def build(root:, includes: [], output: $stderr, expected_artifacts: nil)
+    def build(root:, includes: [], output: $stderr, expected_artifacts: nil, previous_failures: false)
+      raise ArgumentError, "previous_failures must be true or false" unless [true, false].include?(previous_failures)
       root = File.realpath(root)
       raise ArgumentError, "not a directory: #{root}" unless File.directory?(root)
       raise RunnerError, "project Gemfile not found in #{root}" unless File.file?(File.join(root, "Gemfile"))
@@ -33,6 +33,7 @@ module Cleave
       raise ArtifactError, "runner lock must not be a symlink" if File.symlink?(lock_path)
       File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
         raise RunnerError, "another Cleave run or plan is active" unless lock.flock(File::LOCK_EX | File::LOCK_NB)
+        failures, failures_digest = previous_failures ? read_previous_failures(state) : [nil, nil]
         inventory_text = read_artifact(File.join(state, "inventory.json"))
         index_text = read_artifact(File.join(state, "bitmap_index.json"))
         if expected_artifacts && expected_artifacts != [Digest::SHA256.hexdigest(inventory_text), Digest::SHA256.hexdigest(index_text)]
@@ -52,10 +53,10 @@ module Cleave
           current = ShadowVerification.capture(root, extras + files)
           raise ArtifactError, "project changed during discovery, or a discovered ignored spec was not included" unless before.fingerprint == current.fingerprint
           plan = Guardrails.plan(root: root, baseline: inventory, current: current, index: index,
-                                 current_specs: files, previous_failures: nil)
+                                 current_specs: files, previous_failures: failures)
           after = ShadowVerification.capture(root, extras + files)
           raise ArtifactError, "project changed during planning" unless current.fingerprint == after.fingerprint
-          serialize(inventory, current, plan, provenance: provenance)
+          serialize(inventory, current, plan, provenance: provenance, failures_digest: failures_digest)
         end
       ensure
         lock.flock(File::LOCK_UN) if lock
@@ -85,7 +86,42 @@ module Cleave
     end
     private_class_method :read_artifact
 
-    def serialize(baseline, current, plan, provenance:)
+    # This is a local, unsigned observation, not evidence of suite coverage or
+    # a complete failure history. Refuse partial and inconsistent run records.
+    def read_previous_failures(state)
+      text = read_artifact(File.join(state, "last_run.json"))
+      data = ArtifactValidation.parse(text)
+      base = %w[schema version outcome requested_workers actual_workers exit_code observed_failed_specs reports_complete suite_coverage_verified example_count errors telemetry]
+      optional = %w[verification trace index]
+      unless data.is_a?(Hash) && (base - data.keys).empty? && (data.keys - base - optional).empty? &&
+             data["schema"] == RSpecRunner::STATUS_SCHEMA && data["version"] == RSpecRunner::STATUS_VERSION &&
+             %w[passed failed].include?(data["outcome"]) && data["reports_complete"] == true &&
+             data["suite_coverage_verified"] == false && data["errors"] == [] &&
+             data["requested_workers"].is_a?(Integer) && data["requested_workers"].between?(1, RSpecRunner::MAX_WORKERS) &&
+             data["actual_workers"].is_a?(Integer) && data["actual_workers"].between?(1, data["requested_workers"]) &&
+             data["example_count"].is_a?(Integer) && data["example_count"] > 0
+        raise ArtifactError, "previous run is invalid or incomplete"
+      end
+      failures = data["observed_failed_specs"]
+      ArtifactValidation.paths!(failures, "previous failures")
+      unless failures.all? { |path| path.end_with?(".rb") && !internal?(path) } &&
+             failures.length <= data["example_count"] &&
+             ((data["outcome"] == "passed" && data["exit_code"] == 0 && failures.empty?) ||
+              (data["outcome"] == "failed" && data["exit_code"] == 1 && !failures.empty?))
+        raise ArtifactError, "previous run failure observations are inconsistent"
+      end
+      telemetry = data["telemetry"]
+      unless telemetry.is_a?(Hash) && telemetry["version"] == 1 &&
+             %w[passed_examples failed_examples pending_examples].all? { |key| telemetry[key].is_a?(Integer) && telemetry[key] >= 0 } &&
+             %w[passed_examples failed_examples pending_examples].sum { |key| telemetry[key] } == data["example_count"] &&
+             ((telemetry["failed_examples"] == 0) == failures.empty?) && telemetry["failed_examples"] >= failures.length
+        raise ArtifactError, "previous run counts are inconsistent"
+      end
+      [failures, Digest::SHA256.hexdigest(text)]
+    end
+    private_class_method :read_previous_failures
+
+    def serialize(baseline, current, plan, provenance:, failures_digest:)
       selection = plan.selection
       candidates = plan.guardrailed_candidate_specs
       candidate_set = candidates.to_set
@@ -94,7 +130,12 @@ module Cleave
       else
         "Artifact publication provenance is unavailable; this may be a legacy or manually created pair."
       end
-      { "schema" => SCHEMA, "version" => VERSION,
+      failure_note = if plan.previous_failures_available?
+        "Previous failures are unsigned observations from one local run; freshness and suite coverage are unverified."
+      else
+        "Previous failures were not supplied; the candidate is diagnostic and cannot authorize test skipping."
+      end
+      result = { "schema" => SCHEMA, "version" => failures_digest ? 2 : VERSION,
         "diagnostic_only" => true, "suite_coverage_verified" => false,
         "requires_full_suite" => true, "execution_ready" => false,
         "baseline_fingerprint" => baseline.fingerprint, "current_fingerprint" => current.fingerprint,
@@ -105,7 +146,7 @@ module Cleave
         "fallback_reasons" => plan.fallback_reasons,
         "previous_failures_available" => plan.previous_failures_available?,
         "union_nanoseconds" => selection.union_nanoseconds,
-        "limitations" => (selection.limitations + LIMITATIONS + [provenance_note]).uniq.sort,
+        "limitations" => (selection.limitations + LIMITATIONS + [provenance_note, failure_note]).uniq.sort,
         "decisions" => plan.decisions.map do |decision|
           { "spec" => decision.spec, "candidate" => candidate_set.include?(decision.spec),
             "bitmap_sources" => decision.selection.bitmap_sources,
@@ -114,6 +155,11 @@ module Cleave
             "hazards" => decision.hazards.map { |hazard| { "name" => hazard.name, "node_type" => hazard.node_type,
               "line" => hazard.line, "column" => hazard.column, "length" => hazard.length } } }
         end }
+      if failures_digest
+        result["previous_failures_source_sha256"] = failures_digest
+        result["unmatched_previous_failures"] = plan.unmatched_previous_failures
+      end
+      result
     end
     private_class_method :serialize
   end
