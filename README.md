@@ -32,13 +32,27 @@ Scenario B's YAML/JSON runtime hits overlap mandatory masks, so masks are ORed, 
 
 This first delivery is **a simulator, not a Ruby CLI integration**. Fixture source, AST landmarks, file accesses, durations and shadow observations are deterministic example data; the browser does not run Prism, intercept syscalls, execute specs, or verify a CI build. A recorded demo replay is not proof of a zero false-negative rate for a custom diff. The snapshot's normalized TypeScript model is not a claim about an existing Ruby emitter's JSON schema.
 
-The workbench can also inspect real version 1 inventory and bitmap artifacts locally in a separate mode. `bundle exec cleave ui` packaging remains a separate delivery. See [the delivery ledger](docs/delivery.md) for acceptance criteria and example reconciliation.
+The workbench can also inspect real version 1 inventory and bitmap artifacts locally in a separate mode, including through `bundle exec cleave ui`. See [the delivery ledger](docs/delivery.md) for acceptance criteria and example reconciliation.
 
 ## Import real artifacts
 
 In the browser workbench choose **Import artifacts**, select a matching `.cleave/inventory.json` and `.cleave/bitmap_index.json` pair, then select **Load artifacts**. The files are read locally and never uploaded. Each file is limited to 10 MiB and must be valid UTF-8 JSON. The inspector validates v1 schemas, duplicate keys, path ordering, SHA-256 values and inventory fingerprint, index binding, spec references and bitmap ranges before showing data. Matching fingerprints detect incompatible pairs but do not authenticate them. Only the pair emitted by the current Ruby backend is supported; there is no `index.json` emitter yet.
 
-Browse or search recorded and inventoried paths, inspect baseline hashes and root scope, and page through recorded spec associations. An observed path can be absent from the baseline inventory, for example after a failed file read. The bitmap does not retain operation type or attempt/success status. Source, AST, timing, current changes and audit results are unavailable in these artifacts; the inspector does not substitute demo values. Switching back to the simulator displays only its separate fixture. The imported index is always incomplete and **cannot authorize skipping tests**. The inspector is not yet wired to a current inventory, selection, runner, or local CLI server.
+Browse or search recorded and inventoried paths, inspect baseline hashes and root scope, and page through recorded spec associations. An observed path can be absent from the baseline inventory, for example after a failed file read. The bitmap does not retain operation type or attempt/success status. Source, AST, timing, current changes and audit results are unavailable in these artifacts; the inspector does not substitute demo values. Switching back to the simulator displays only its separate fixture. The imported index is always incomplete and **cannot authorize skipping tests**. The inspector is not wired to a current inventory, selection, or runner.
+
+## Open the local workbench from Ruby
+
+With a matching artifact pair in the project's `.cleave/` directory, run:
+
+```sh
+bundle exec cleave ui                 # opens a browser when supported
+bundle exec cleave ui --no-open       # print URL for manual opening
+bundle exec cleave ui --port 4321     # optional fixed loopback port
+```
+
+The gem includes a prebuilt workbench; no Node runtime is required. The command validates and captures both files at startup and opens the artifact inspector with that **startup snapshot**. Restart the server to refresh it. If files are absent, invalid, symlinked, or over 10 MiB, startup fails rather than showing demo data. The importer can also load a separate pair manually; the simulator remains explicitly separate. The v1 artifacts remain incomplete and cannot authorize skipping tests.
+
+The read-only server binds only `127.0.0.1`, chooses an available port by default, serves only packaged assets and the two captured artifacts, checks the Host/Origin, and uses a random per-run URL capability. **Do not share the printed URL**; anyone with local access and that URL can read the captured artifacts. It is not intended for public/network exposure, hostile local users, or reverse proxies. Stop it with Ctrl-C. Browser launch is best-effort; use the printed URL if it cannot open automatically. Rebuild packaged assets for development with `npm ci && npm run build:gem-ui`; the `public/` directory is generated and checked in so gem users do not need Node.
 
 ## Ruby static-analysis slice
 
@@ -111,7 +125,7 @@ changes = loaded_inventory.diff(Cleave::Inventory.capture_git(root: Dir.pwd, gen
 
 Spec **paths** are identities; within each index they are sorted and assigned contiguous zero-based bit positions. Positions can change when specs are added or removed, so do not combine masks from different indexes. Trace observations for absent paths are retained, including failed reads; root-scope paths are stored separately. Unknown scopes and mismatched trace roots are rejected. External paths are omitted and noted as a limitation. Multiple explicitly collected reports can be supplied, but this does not prove all processes or tests were observed.
 
-The two JSON files have explicit schemas and versions. Bitmap masks are canonical lowercase hexadecimal integers; the index binds to the inventory's content fingerprint. Reading validates fields, paths, duplicate JSON keys, IDs/ranges, and the fingerprint, and rejects unsupported versions or incomplete/mismatched pairs. Each file is replaced atomically, but the pair is **not** a single atomic transaction. A fingerprint detects a mixed pair when inventories differ; it is not an authenticity signature or a guarantee against concurrent writers. Both artifacts deliberately record `complete: false`. **Do not use this index to skip tests.** Safe selective execution and local CLI workbench integration are later slices.
+The two JSON files have explicit schemas and versions. Bitmap masks are canonical lowercase hexadecimal integers; the index binds to the inventory's content fingerprint. Reading validates fields, paths, duplicate JSON keys, IDs/ranges, and the fingerprint, and rejects unsupported versions or incomplete/mismatched pairs. Each file is replaced atomically, but the pair is **not** a single atomic transaction. A fingerprint detects a mixed pair when inventories differ; it is not an authenticity signature or a guarantee against concurrent writers. Both artifacts deliberately record `complete: false`. **Do not use this index to skip tests.** Safe selective execution remains future work.
 
 ## Bitmap selection preview
 
@@ -190,4 +204,4 @@ bundle exec cleave graph --output .cleave/graph.html
 
 Open the generated HTML file locally in a modern browser. It is self-contained and uses no network requests. Search and page through observed paths or indexed specs, follow associations in either direction, and inspect recorded root-scope paths and index limitations. Long lists are paginated without dropping associations. An existing regular output file is replaced atomically; symlink output targets are rejected, and the output directory must already exist. Artifact paths and limitations are escaped before embedding; nevertheless, only open exports and artifacts from sources you trust.
 
-The graph reflects **baseline artifact observations**, not the current diff or a live trace. A bitmap associates an observed path with a spec; it does not retain operation types, distinguish attempts from successful reads, identify precise lines, or prove that an edge is exhaustive. Root-scope observations are shown separately, not fabricated as per-spec edges. An observed path absent from the inventory may represent a missing-file attempt. External paths were omitted by the indexer. The index is incomplete and configured-suite coverage is not verified: **never use this graph to decide which tests to skip**. Static graph resolution and `cleave ui` remain separate work.
+The graph reflects **baseline artifact observations**, not the current diff or a live trace. A bitmap associates an observed path with a spec; it does not retain operation types, distinguish attempts from successful reads, identify precise lines, or prove that an edge is exhaustive. Root-scope observations are shown separately, not fabricated as per-spec edges. An observed path absent from the inventory may represent a missing-file attempt. External paths were omitted by the indexer. The index is incomplete and configured-suite coverage is not verified: **never use this graph to decide which tests to skip**. Static graph resolution remains future work.

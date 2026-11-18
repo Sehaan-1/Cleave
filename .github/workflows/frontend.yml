@@ -1,0 +1,35 @@
+name: Frontend checks
+on:
+  push:
+  pull_request:
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck && npm test && npm run build:gem-ui
+      - name: Check packaged assets are current
+        run: test -z "$(git status --porcelain -- public)"
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser tests
+        shell: bash
+        env:
+          CLEAVE_REAL_UI: '1'
+        run: |
+          set +e
+          npm run test:e2e 2>&1 | tee /tmp/cleave-e2e.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            message=$(tail -c 12000 /tmp/cleave-e2e.log | python3 -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))')
+            echo "::error::$message"
+          fi
+          exit "$status"
