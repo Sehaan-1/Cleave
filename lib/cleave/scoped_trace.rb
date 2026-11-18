@@ -94,7 +94,7 @@ module Cleave
       raise ArgumentError, "spec path must be a non-empty string other than r" unless path.is_a?(String) && !path.empty? && path != ROOT_SCOPE
       raise "trace is not active" unless self.class.active.equal?(self)
       stack = (Thread.current[SCOPE_KEY] ||= [])
-      stack.push(path.dup.freeze)
+      stack.push([self, path.dup.freeze])
       begin
         yield
       ensure
@@ -120,12 +120,10 @@ module Cleave
           return
         end
         absolute = File.expand_path(path)
-        relative = if absolute.start_with?(root + File::SEPARATOR)
-          absolute.delete_prefix(root + File::SEPARATOR)
-        else
-          absolute
-        end
-        scope = Thread.current[SCOPE_KEY]&.last || ROOT_SCOPE
+        prefix = root.end_with?(File::SEPARATOR) ? root : root + File::SEPARATOR
+        relative = absolute.start_with?(prefix) ? absolute.delete_prefix(prefix) : absolute
+        frame = Thread.current[SCOPE_KEY]&.reverse_each&.find { |session, _| session.equal?(self) }
+        scope = frame ? frame.last : ROOT_SCOPE
         @mutex.synchronize do
           @events.add([scope, relative.freeze, kind, status].freeze)
           @limitations.add("A forked child report must be collected separately.") if Process.pid != @owner_pid
@@ -181,7 +179,8 @@ module Cleave
   module FileOpenHook
     def open(path, *args, **kwargs, &block)
       trace = ScopedTrace.active
-      trace&.observe(path, "file_open", "attempt")
+      return super unless trace
+      trace.observe(path, "file_open", "attempt")
       if block
         super(path, *args, **kwargs) do |file|
           trace&.observe(path, "file_open", "success")

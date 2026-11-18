@@ -95,6 +95,7 @@ class ScopedTraceTest < Minitest::Test
     assert_raises(ArgumentError) { @trace.with_spec("r") {} }
     path = File.join(@root, "data.json")
     assert_equal :block_result, File.open(path) { :block_result }
+    assert_equal :stopped, File.open(path) { break :stopped }
     file = File.open(Pathname.new(path))
     assert_equal '{"amount":1}', file.read
     file.close
@@ -109,6 +110,33 @@ class ScopedTraceTest < Minitest::Test
     assert_raises(RuntimeError) { @trace.with_spec("spec/no_spec.rb") {} }
     replacement = Cleave::ScopedTrace.start(root: @root)
     replacement.stop
+  end
+
+
+  def test_a_scope_from_a_stopped_session_does_not_leak_into_the_next
+    @trace.with_spec("spec/old_spec.rb") do
+      @trace.stop
+      replacement = Cleave::ScopedTrace.start(root: @root)
+      begin
+        File.read(File.join(@root, "data.json"))
+        data = replacement.report.to_h.fetch("events")
+        assert_includes data, { "scope" => "r", "path" => "data.json", "kind" => "io_read", "status" => "success" }
+      ensure
+        replacement.stop
+      end
+    end
+  end
+
+  def test_filesystem_root_uses_relative_paths
+    @trace.stop
+    trace = Cleave::ScopedTrace.start(root: File::SEPARATOR)
+    begin
+      File.read(File.join(@root, "data.json"))
+      event = trace.report.to_h.fetch("events").find { |e| e["kind"] == "io_read" && e["status"] == "success" }
+      assert_equal File.join(@root, "data.json").delete_prefix(File::SEPARATOR), event.fetch("path")
+    ensure
+      trace.stop
+    end
   end
 
   def test_child_report_must_be_collected_independently
