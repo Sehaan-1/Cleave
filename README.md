@@ -32,7 +32,13 @@ Scenario B's YAML/JSON runtime hits overlap mandatory masks, so masks are ORed, 
 
 This first delivery is **a simulator, not a Ruby CLI integration**. Fixture source, AST landmarks, file accesses, durations and shadow observations are deterministic example data; the browser does not run Prism, intercept syscalls, execute specs, or verify a CI build. A recorded demo replay is not proof of a zero false-negative rate for a custom diff. The snapshot's normalized TypeScript model is not a claim about an existing Ruby emitter's JSON schema.
 
-The Ruby library now emits versioned inventory and bitmap artifacts, but UI artifact import and `bundle exec cleave ui` packaging remain separate deliveries. See [the delivery ledger](docs/delivery.md) for acceptance criteria and example reconciliation.
+The workbench can also inspect real version 1 inventory and bitmap artifacts locally in a separate mode. `bundle exec cleave ui` packaging remains a separate delivery. See [the delivery ledger](docs/delivery.md) for acceptance criteria and example reconciliation.
+
+## Import real artifacts
+
+In the browser workbench choose **Import artifacts**, select a matching `.cleave/inventory.json` and `.cleave/bitmap_index.json` pair, then select **Load artifacts**. The files are read locally and never uploaded. Each file is limited to 10 MiB and must be valid UTF-8 JSON. The inspector validates v1 schemas, duplicate keys, path ordering, SHA-256 values and inventory fingerprint, index binding, spec references and bitmap ranges before showing data. Matching fingerprints detect incompatible pairs but do not authenticate them. Only the pair emitted by the current Ruby backend is supported; there is no `index.json` emitter yet.
+
+Browse or search recorded and inventoried paths, inspect baseline hashes and root scope, and page through recorded spec associations. An observed path can be absent from the baseline inventory, for example after a failed file read. The bitmap does not retain operation type or attempt/success status. Source, AST, timing, current changes and audit results are unavailable in these artifacts; the inspector does not substitute demo values. Switching back to the simulator displays only its separate fixture. The imported index is always incomplete and **cannot authorize skipping tests**. The inspector is not yet wired to a current inventory, selection, runner, or local CLI server.
 
 ## Ruby static-analysis slice
 

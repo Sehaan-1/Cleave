@@ -11,6 +11,7 @@ The Ruby engine is built in independently reviewable slices. This sequence suppl
 7a. **Shadow verification**: compare a diagnostic guardrailed candidate with failures observed in one configured full-suite run; never authorize skipping.
 7b. **Terminal telemetry**: report measured runner/worker-collection durations and observed example/spec counts, plus diagnostic shadow candidate/OR metrics when available.
 7c. **Graph export**: standalone interactive HTML exploration of the observed artifact relationships, with explicit limitations. Verify against real projects before claiming any false-negative rate.
-8. **Workbench integration**: adapt the actual versioned artifacts to the UI and package local CLI assets once the emitter exists.
+8a. **Artifact inspector**: locally import and validate the versioned inventory/index pair, without mixing it with the simulator.
+8b. **Local CLI delivery**: package and serve the workbench from the Ruby CLI; future work.
 
 Exact boundaries and ordering may change as implementation constraints are discovered. A static AST is not evidence that a skipped test is safe.

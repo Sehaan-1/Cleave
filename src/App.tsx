@@ -5,6 +5,7 @@ import { ExecutionMatrix } from "./components/ExecutionMatrix";
 import { CommandBar, Overview, StatusBar } from "./components/Header";
 import { Inspector } from "./components/Inspector";
 import { Inventory } from "./components/Inventory";
+import { ArtifactInspector } from "./components/ArtifactInspector";
 
 const media = window.matchMedia("(max-width: 800px)");
 const subscribe = (f: () => void) => {
@@ -14,9 +15,11 @@ const subscribe = (f: () => void) => {
 export default function App() {
   const compact = useSyncExternalStore(subscribe, () => media.matches);
   const [pane, setPane] = useState("map");
+  const [artifacts, setArtifacts] = useState(false);
+  if (artifacts) return <ArtifactInspector onBack={() => setArtifacts(false)} compact={compact} />;
   return (
     <div className="app-frame">
-      <CommandBar />
+      <CommandBar onOpenArtifacts={() => setArtifacts(true)} />
       <Overview />
       {compact && (
         <nav className="mobile-nav" aria-label="Workbench panels">

@@ -1,0 +1,23 @@
+{
+  "schema": "cleave.inventory",
+  "version": 1,
+  "files": [
+    {
+      "path": "app/服务.rb",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "path": "config/boot.yml",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "spec/alpha_spec.rb",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "path": "spec/beta_spec.rb",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "fingerprint": "d2b402386ff0dce879e6bd2d0f53b3be9b0b364246633bac10c86e8c9f98e7ed"
+}
