@@ -12,6 +12,7 @@ module Cleave
     SCHEMA = "cleave.rspec_trace"
     VERSION = 1
     MAX_BYTES = 50 * 1024 * 1024
+    MAX_FORK_REPORTS = 1024
 
     def read(path, root:)
       raise ArtifactError, "trace file must not be a symlink" if File.symlink?(path)
@@ -59,6 +60,43 @@ module Cleave
       report_from_h(raw["report"], root: root, pid: pid)
     rescue Errno::ENOENT => error
       raise ArtifactError, "missing trace subprocess output: #{error.message}"
+    end
+
+    # Read only atomically published child files observed after the parent exits.
+    # This does not wait for or assert the existence of every forked process.
+    def merge_forks(parent, directory, root:)
+      raise ArtifactError, "fork report directory must be a real directory" if File.symlink?(directory) || !File.directory?(directory)
+      names = Dir.children(directory).select { |name| name.end_with?(".json") }.sort
+      raise ArtifactError, "too many fork reports" if names.length > MAX_FORK_REPORTS
+      events = parent.events.dup
+      limitations = parent.limitations.dup
+      bytes_read = 0
+      names.each do |name|
+        match = name.match(/\A([1-9][0-9]*)-[0-9a-f]{16}\.json\z/)
+        raise ArtifactError, "invalid fork report filename" unless match
+        path = File.join(directory, name)
+        raise ArtifactError, "fork report must not be a symlink" if File.symlink?(path)
+        flags = File::RDONLY
+        flags |= File::NOFOLLOW if File.const_defined?(:NOFOLLOW)
+        flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK)
+        content = File.open(path, flags) do |file|
+          raise ArtifactError, "fork report must be a regular file" unless file.stat.file?
+          file.read(MAX_BYTES + 1) || +""
+        end
+        bytes_read += content.bytesize
+        raise ArtifactError, "fork reports exceed 50 MiB" if bytes_read > MAX_BYTES
+        raw = ArtifactValidation.parse(content)
+        ArtifactValidation.keys!(raw, %w[report], "fork subprocess output")
+        child = report_from_h(raw["report"], root: root, pid: match[1].to_i)
+        raise ArtifactError, "fork report cannot use parent process ID" if child.pid == parent.pid
+        events.concat(child.events)
+        limitations.concat(child.limitations)
+      end
+      merged = TraceReport.new(root: parent.root, pid: parent.pid, events: events.sort.uniq, limitations: limitations.uniq.sort)
+      raise ArtifactError, "merged trace exceeds 50 MiB" if JSON.generate(recorded(merged)).bytesize > MAX_BYTES
+      [merged, names.length]
+    rescue Errno::ENOENT => error
+      raise ArtifactError, "fork report disappeared: #{error.message}"
     end
 
     def recorded(report)
