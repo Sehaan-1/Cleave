@@ -118,7 +118,7 @@ report = Cleave::TraceCapture.read(".cleave/last_trace.json", root: Dir.pwd)
 # captured an inventory and independently established the spec universe.
 ```
 
-This is not automatic artifact/index generation. It does not prove suite discovery, child-process coverage, all filesystem operations, or absence of false negatives. `.cleave/` and project `.git/` operations are excluded from the trace. The trace is not bound to a content inventory and can become stale; a non-traced run does not replace the last traced run. Only the parent process report is collected; forked children cannot replace it. Trace reports are diagnostic and **must never be used to skip tests**. `--trace` currently requires one worker and cannot be combined with `--verify`.
+Tracing alone does not generate artifacts; use the opt-in command below. It does not prove suite discovery, child-process coverage, all filesystem operations, or absence of false negatives. `.cleave/` and project `.git/` operations are excluded from the trace. The trace is not bound to a content inventory and can become stale; a non-traced run does not replace the last traced run. Only the parent process report is collected; forked children cannot replace it. Trace reports are diagnostic and **must never be used to skip tests**. `--trace` currently requires one worker and cannot be combined with `--verify`.
 
 ## Inventory and bitmap artifacts
 
@@ -163,6 +163,23 @@ p result.union_nanoseconds      # monotonic time for bitmap OR only
 The preview ORs each changed path's recorded bitmap, attributes its bits to changed files, and additionally includes changed or newly discovered specs. `observed_baseline_mask` uses baseline index positions; `candidate_mask` and `execution_mask` use the sorted **current** spec positions. Removed specs are not execution candidates. Each decision exposes its bitmap sources, changed/unindexed status and fallback reasons. Root-scope changes and unmapped changes are reported separately. Timings are actual measurements, not a guaranteed latency target.
 
 **This API cannot authorize skipping or execute tests.** Every v1 index is incomplete, so `requires_full_suite?` is always true and `execution_ready?` is always false. `selected_specs` and `execution_mask` are full only over the caller-supplied current universe: independently discover the full suite; they cannot prove it contains every test. Omission of an indexed spec still present in the inventory is rejected, but unknown new/custom test paths cannot be inferred reliably. A future runner must invoke full-suite discovery when this fallback is set, never dispatch the preview or rely on the supplied list alone. Prism and prior-failure guardrails are planned separately below. Static dependency resolution remains unimplemented; the runner below never executes this preview.
+
+
+## Generate diagnostic artifacts from a traced run
+
+From the Git project root, after installing the bundle:
+
+```sh
+bundle exec cleave run --trace --index
+bundle exec cleave run --trace --index --include tmp/generated.json --include spec/ignored_spec.rb
+bundle exec cleave ui --no-open
+```
+
+This runs the configured RSpec suite once, serially, and builds `.cleave/inventory.json` and `.cleave/bitmap_index.json` from that run's trace and the spec files reported by RSpec. Git tracked and non-ignored files are hashed before and after the run, excluding `.cleave/`; each repeatable `--include` adds one project-relative file, including ignored generated dependencies or ignored specs. Include files must be regular, not symlinks. Reported specs absent from the inventory cause generation to fail. Observed paths may still be absent from the inventory, for example ignored files or failed reads. External paths are omitted from the index.
+
+If the snapshots differ, a report is incomplete, an output target is a symlink, or generation otherwise fails, the command still attempts the configured suite and exits nonzero. `.cleave/last_run.json` reports index status. A failed run normally leaves any old artifact files in place; **check the latest run's index status before treating them as newly generated**. Each file is replaced atomically, but the two replacements are not a transaction: an interruption or write failure can leave an old, new, or mismatched pair. Readers reject mismatched fingerprints; a matching fingerprint does not establish which run created an index. Non-indexed runs do not refresh the artifacts.
+
+These snapshots are not transactional: they cannot detect changes reverted during a run, unlisted ignored files, external dependencies, or excluded examples. A failure inside an example can still yield an index, but the run remains failed. The pair is **always incomplete and cannot authorize test skipping**. The main workbench remains simulator-driven; the separate artifact inspector and graph can display this pair. No historical trace is silently reused, and no automatic static dependency resolution or selective execution occurs.
 
 ## Guardrail planning
 
