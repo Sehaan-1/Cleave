@@ -3,7 +3,7 @@
 The Ruby engine is built in independently reviewable slices. This sequence supplements the workbench delivery ledger; none of the later slices is implied by the static pass.
 
 1. **Static Prism pass**: parse Ruby files without executing them; return located constant definitions/references, literal `require_relative` edges and hazard facts. Mark matching spec files mandatory. Fail closed on parse/I/O errors. Delivered.
-2. **Scoped tracing**: define isolation and recording semantics, hook actual runtime reads/requires, preserve root/test attribution and handle parallelism and incomplete traces safely. This slice exposes process-local observations and explicit limitations; automatic child aggregation remains future work. Serial RSpec example tracing is available as a separate opt-in run.
+2. **Scoped tracing**: define isolation and recording semantics, hook actual runtime reads/requires, preserve root/test attribution and handle parallelism and incomplete traces safely. This slice exposes process-local observations and explicit limitations; opt-in fork aggregation is best effort and remains incomplete. Serial RSpec example tracing is available as a separate opt-in run.
 3. **Inventory and bitmap index**: content hashes, path-based test identities, versioned persisted artifacts and schema validation, covering additions/deletions and incomplete data. This slice produces incomplete indexes; it does not select tests.
 4. **Selection**: compare inventories and OR bitmaps with explicit safety behavior and attribution. The preview measures its actual OR time, but v1 indexes require full-suite fallback; no execution adapter or latency guarantee is provided.
 5a. **Guardrail planning**: apply Prism hazards, caller-supplied prior failures and root fallback to the diagnostic union; abort on stale or invalid spec source. v1 indexes still require the full suite and cannot authorize execution.
@@ -18,6 +18,7 @@ The Ruby engine is built in independently reviewable slices. This sequence suppl
 9d. **Best-effort fork observations**: opt-in collection of Ruby fork reports from one traced RSpec process, with inherited scope and explicit child-coverage limitations; no test skipping.
 10a. **Diagnostic project plan**: expose current Git inventory, RSpec dry-run discovery and guardrailed candidates as versioned JSON; no selective execution.
 9c. **Artifact publication provenance**: mark generation in progress/incomplete and bind both exact artifact byte streams to a local marker; do not infer authentication, freshness or coverage.
+10d. **Approximate static dependency planning**: opt-in bounded current-inventory graph of relative requires and syntactic constant-name matches, with conservative uncertainty/deletion attribution and full-suite fallback.
 10c. **Prior failure input**: opt in to use the latest internally consistent run record in the CLI diagnostic plan and workbench, with source digest and explicit unmatched paths; unsigned observations do not prove coverage and cannot authorize skipping.
 10b. **Local plan viewer**: opt in to compute and display a validated diagnostic startup plan in the loopback workbench, separate from simulator and artifact inspector; no selective execution.
 

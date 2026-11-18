@@ -56,7 +56,7 @@ The gem includes a prebuilt workbench; no Node runtime is required. The command 
 
 With `--plan`, the server first computes a diagnostic plan using the same dry-run discovery and current-file checks as `cleave plan`. **RSpec dry-run loads spec files and may have side effects.** This is opt-in: ordinary `cleave ui` does not run discovery. Planning requires the Git project root, a project bundle and a valid artifact pair; failure aborts startup rather than showing a simulated result. Repeat `--include PATH` to include ignored current files. The exact artifact bytes used for planning must match the pair loaded by the server, even if two indexes have the same inventory fingerprint.
 
-The plan view shows changed paths, discovered specs, candidate reasons, Prism hazards and coverage limitations as a separate startup snapshot. Click a changed path to filter related specs, or switch to the artifact inspector or simulator. Restart the CLI after changes to refresh; changes after startup are not reflected. The candidate is **not an execution list** and the configured full suite remains mandatory. Source, live execution, previous failures and shadow audit results are not supplied by this view. The Git snapshots are nontransactional, artifact provenance is unverified, and discovered specs do not prove suite coverage.
+The plan view shows changed paths, discovered specs, candidate reasons, Prism hazards and coverage limitations as a separate startup snapshot. Click a changed path to filter related specs, or switch to the artifact inspector or simulator. Restart the CLI after changes to refresh; changes after startup are not reflected. The candidate is **not an execution list** and the configured full suite remains mandatory. Source, live execution and shadow audit results are not supplied by this view; previous failures and static dependencies are available only when explicitly requested. The Git snapshots are nontransactional, artifact provenance is unverified, and discovered specs do not prove suite coverage.
 
 The read-only server binds only `127.0.0.1`, chooses an available port by default, serves only packaged assets and the two captured artifacts, checks the Host/Origin, and uses a random per-run URL capability. **Do not share the printed URL**; anyone with local access and that URL can read the captured artifacts. It is not intended for public/network exposure, hostile local users, or reverse proxies. Stop it with Ctrl-C. Browser launch is best-effort; use the printed URL if it cannot open automatically. Rebuild packaged assets for development with `npm ci && npm run build:gem-ui`; the `public/` directory is generated and checked in so gem users do not need Node.
 
@@ -236,6 +236,20 @@ This explicit opt-in snapshots `.cleave/last_run.json` under the runner lock bef
 
 A matching failed spec is added to the diagnostic candidate with `previous_failure` attribution. Paths no longer discovered appear in `unmatched_previous_failures` and trigger the `previous_failures_unmatched` fallback; they are not silently dropped. Opting in emits diagnostic plan schema version 2 with the source digest and unmatched paths; the default version 1 stays unchanged. Both versions require the full suite. The UI is a read-only startup snapshot; restart it to refresh. Shadow verification does not yet consume prior failures and must not be interpreted as validation of this input.
 
+### Include approximate static dependencies
+
+```sh
+bundle exec cleave plan --static-dependencies > .cleave/plan.json
+bundle exec cleave ui --plan --static-dependencies --no-open
+# Optional: combine with --previous-failures and repeatable --include PATH.
+```
+
+This opt-in parses current inventoried Ruby files with Prism. It follows literal `require_relative` links to inventoried `.rb` files transitively and links constant references to **all** class/module definitions sharing their final name. That is a deliberately broad syntactic approximation, not Ruby constant resolution: namespaces, lookup, load order and redefinitions are not modeled. Changed reachable Ruby files appear as `static_sources` and add the spec to the candidate, even without a runtime bitmap hit. Cycles and ambiguous names are supported.
+
+Unresolved constant references, unresolved relative loads, `require`/`load`/`autoload`, and recognized dynamic or directory operations anywhere reachable add that spec conservatively with `static_uncertainty`. Ordinary external constants such as `RSpec` therefore commonly make many or all specs candidates. If any inventoried Ruby file was deleted, all discovered specs become candidates because the previous static graph is not available. Non-inventoried/ignored files, constant assignments, dynamic Ruby, native code, external files and other operations can still escape this approximation; **it is not evidence of completeness**. The normal full-suite fallback still applies regardless of candidate size. Shadow verification does not yet use this opt-in static graph.
+
+Static planning parses the entire current inventoried Ruby universe, including explicit `--include` files, so invalid, changed, missing, symlinked, or unreadable files abort the plan. It is bounded to 20,000 Ruby files, 2 MiB per file, 64 MiB total source bytes, 250,000 edges, two million constant matches and two million graph traversal steps; exceeding a bound aborts rather than emitting a partial plan. The hashes and before/after inventory checks detect some races, not transactional changes. Discovery still loads specs in a separate process. Static-enabled plans use diagnostic schema version 3 (with or without prior failures); default v1/v2 plans are unchanged.
+
 ## Guardrail planning
 
 `Cleave::Guardrails.plan` combines the selection preview with Prism hazards and caller-supplied previous failures. It re-reads every supplied current Ruby spec, verifies its SHA-256 against the current inventory, and parses those exact bytes. A stale, missing, symlinked, non-Ruby, unreadable or invalid spec aborts the plan rather than being treated as hazard-free.
@@ -253,7 +267,7 @@ p plan.guardrailed_candidate_specs      # preview only; masks are ORed, not summ
 p plan.fallback_reasons
 ```
 
-The plan preserves overlapping reasons, hazard locations and unmatched previous-failure paths. The supplied previous-failure list is not independently verified or persisted by this API; missing or unmatched results are explicitly flagged. Root changes select the whole supplied universe in the preview. As before, the universe must be independently discovered, v1 indexes are incomplete, and the plan **always requires a full-suite fallback and is not execution-ready**. Neither the guardrailed preview nor the supplied list is authorization to skip tests. The configured-suite runner below persists observed outcomes and propagates failures; it does not yet feed them back into this plan.
+The plan preserves overlapping reasons, hazard locations and unmatched previous-failure paths. The supplied previous-failure list is not independently verified or persisted by this API; missing or unmatched results are explicitly flagged. Root changes select the whole supplied universe in the preview. As before, the universe must be independently discovered, v1 indexes are incomplete, and the plan **always requires a full-suite fallback and is not execution-ready**. Neither the guardrailed preview nor the supplied list is authorization to skip tests. The configured-suite runner below persists observed outcomes; the diagnostic-plan opt-in above can use its latest completed record.
 
 ## Run the configured RSpec suite
 

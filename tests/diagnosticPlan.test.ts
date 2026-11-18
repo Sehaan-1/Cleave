@@ -49,3 +49,29 @@ test("imports v2 prior failure attribution and rejects inconsistent metadata", (
   const bad3 = structuredClone(d); bad3.decisions[2].reasons = ["incomplete_index_fallback"]; assert.throws(() => importDiagnosticPlan(JSON.stringify(bad3)));
   const bad4 = structuredClone(d); bad4.unmatched_previous_failures = [d.decisions[0].spec]; assert.throws(() => importDiagnosticPlan(JSON.stringify(bad4)));
 });
+
+test("imports v3 static candidates and rejects invalid static attribution", () => {
+  const d = raw(); d.version = 3;
+  d.previous_failures_source_sha256 = null; d.unmatched_previous_failures = []; d.static_deleted_fallback = false;
+  d.decisions.forEach((item: { static_sources: string[], static_uncertainties: string[] }) => { item.static_sources = []; item.static_uncertainties = []; });
+  d.decisions[2].candidate = true; d.decisions[2].static_sources = ["app/服务.rb"];
+  d.decisions[2].static_uncertainties = ["unresolved_constant"];
+  d.decisions[2].reasons.push("static_dependency", "static_uncertainty");
+  d.fallback_reasons.push("static_uncertainty"); d.candidate_specs.push("spec/gamma_spec.rb");
+  const plan = importDiagnosticPlan(JSON.stringify(d));
+  assert.equal(plan.static_dependencies, true);
+  assert.deepEqual(plan.decisions[2].static_sources, ["app/服务.rb"]);
+  assert.deepEqual(plan.decisions[2].static_uncertainties, ["unresolved_constant"]);
+  for (const change of [
+    (v: any) => { v.decisions[2].static_sources = ["unchanged.rb"]; },
+    (v: any) => { v.decisions[2].static_uncertainties = ["invented"]; },
+    (v: any) => { v.decisions[2].reasons = ["incomplete_index_fallback"]; },
+    (v: any) => { v.static_deleted_fallback = true; },
+    (v: any) => { v.fallback_reasons = v.fallback_reasons.filter((s: string) => s !== "static_uncertainty"); },
+    (v: any) => { v.previous_failures_source_sha256 = "a".repeat(64); },
+  ]) { const bad = structuredClone(d); change(bad); assert.throws(() => importDiagnosticPlan(JSON.stringify(bad))); }
+  const withFailures = structuredClone(d); withFailures.previous_failures_available = true;
+  withFailures.previous_failures_source_sha256 = "a".repeat(64);
+  withFailures.fallback_reasons = withFailures.fallback_reasons.filter((s: string) => s !== "previous_failures_unavailable");
+  assert.equal(importDiagnosticPlan(JSON.stringify(withFailures)).previous_failures_available, true);
+});
