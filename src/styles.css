@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "./styles/core.css";
+@import "./styles/telemetry.css";
+@import "./styles/inventory.css";
+@import "./styles/graph.css";
+@import "./styles/matrix.css";
+@import "./styles/inspector.css";
+@import "./styles/compact.css";

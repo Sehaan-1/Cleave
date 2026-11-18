@@ -1,0 +1,342 @@
+@media (min-width: 801px) and (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 250px minmax(0, 1fr);
+    margin-inline: 12px;
+  }
+  .overview,
+  .command-bar,
+  .status-bar {
+    padding-inline: 12px;
+  }
+  .metric {
+    padding-inline: 12px;
+  }
+  .metric-foot {
+    font-size: 10px;
+  }
+  .graph-heading,
+  .matrix-heading {
+    padding-inline: 12px;
+  }
+  .result-filters {
+    gap: 1px;
+  }
+  .spec-search {
+    width: 95px;
+  }
+  .preset-nav > span {
+    display: none;
+  }
+}
+@media (min-width: 801px) and (max-height: 800px) {
+  .overview {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  .overview-title {
+    margin-bottom: 8px;
+  }
+  .metric {
+    padding-block: 8px;
+  }
+  .metric-value {
+    margin-block: 6px;
+  }
+  .graph-heading,
+  .matrix-heading {
+    padding-block: 8px;
+  }
+  .workspace {
+    grid-template-rows: minmax(0, 1.34fr) minmax(0, 1fr);
+  }
+}
+@media (min-width: 801px) and (max-height: 620px) {
+  .overview-title {
+    display: none;
+  }
+  .metric-label,
+  .metric-foot {
+    font-size: 9px;
+  }
+  .metric-value strong {
+    font-size: 22px;
+  }
+  .section-kicker {
+    display: none;
+  }
+  .graph-heading h2,
+  .matrix-heading h2 {
+    font-size: 16px;
+  }
+}
+@media (max-width: 800px) {
+  .app-frame {
+    grid-template-rows: 49px auto 38px minmax(0, 1fr) 23px;
+  }
+  .command-bar {
+    padding: 0 12px;
+    gap: 9px;
+  }
+  .brand {
+    font-size: 20px;
+  }
+  .brand > span {
+    font-size: 23px;
+  }
+  .brand-sub {
+    font-size: 8px;
+  }
+  .preset-nav {
+    display: none;
+  }
+  .compact-preset {
+    display: flex;
+    position: relative;
+    align-items: center;
+    gap: 3px;
+    background: var(--surface-active);
+    padding: 5px;
+    border-radius: 3px;
+    min-width: 0;
+  }
+  .compact-preset > svg {
+    pointer-events: none;
+  }
+  .compact-preset select {
+    max-width: 39vw;
+    appearance: none;
+    padding-right: 2px;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    background: var(--surface-active);
+  }
+  .overview {
+    padding: 10px 10px 4px;
+  }
+  .overview-title {
+    gap: 5px;
+    margin-bottom: 7px;
+  }
+  .title-line {
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  h1 {
+    font-size: 19px;
+  }
+  .snapshot-name {
+    font-size: 9px;
+  }
+  .engine-indicator {
+    display: none;
+  }
+  .metrics {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    gap: 4px;
+    padding-bottom: 2px;
+  }
+  .metric {
+    flex: 0 0 max(154px, 42%);
+    scroll-snap-align: start;
+    padding: 9px 11px;
+  }
+  .metric-label {
+    font-size: 10px;
+  }
+  .metric-value {
+    margin: 6px 0;
+  }
+  .metric-value strong {
+    font-size: 23px;
+  }
+  .metric-foot {
+    font-size: 9px;
+  }
+  .mobile-nav {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin: 0 10px;
+  }
+  .mobile-nav button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    flex: 1;
+    padding: 5px;
+    border-radius: 3px;
+    color: var(--dim);
+    font-size: 11px;
+  }
+  .mobile-nav button[aria-pressed="true"] {
+    background: var(--surface-active);
+    color: var(--ink);
+  }
+  .workspace {
+    display: flex;
+    margin: 0 10px 6px;
+  }
+  .workspace > .pane {
+    width: 100%;
+  }
+  .graph-heading,
+  .matrix-heading {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+  .edge-filters button,
+  .matrix-tabs button {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+  .graph-heading {
+    align-items: flex-start;
+  }
+  .compact-lanes {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: auto;
+    padding: 0 10px 8px;
+  }
+  .compact-lanes > div {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 9px;
+    background: var(--surface-elevated);
+    border-radius: 3px;
+  }
+  .compact-lanes .eyebrow {
+    color: var(--green-ink);
+    font-size: 9px;
+  }
+  .compact-lanes button,
+  .compact-lanes > div > span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font: 11px var(--mono);
+  }
+  .compact-lanes button {
+    padding-block: 3px;
+  }
+  .compact-lanes > div > span {
+    color: var(--dim);
+    font-size: 10px;
+  }
+  .scenario-note {
+    flex-wrap: wrap;
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+  .scenario-note > span:nth-child(2) {
+    flex: 1;
+    min-width: 140px;
+  }
+  .pane-intro {
+    padding: 10px 12px 7px;
+  }
+  .inventory-controls {
+    padding-bottom: 4px;
+  }
+  .file-detail {
+    font-size: 12px;
+  }
+  .file-row {
+    min-height: 45px;
+  }
+  .matrix-toolbar {
+    flex-wrap: wrap;
+    padding: 0 8px 6px;
+  }
+  .result-filters {
+    gap: 1px;
+  }
+  .result-filters button {
+    padding-inline: 5px;
+    font-size: 10px;
+  }
+  .spec-search {
+    width: 100%;
+  }
+  .spec-table {
+    min-width: 0;
+  }
+  .spec-table .col-trigger,
+  .spec-table .col-hazard,
+  .spec-table .col-time {
+    display: none;
+  }
+  .spec-table .col-bit {
+    width: 14% !important;
+  }
+  .spec-table .col-path {
+    width: 52% !important;
+  }
+  .spec-table .col-status {
+    width: 34% !important;
+  }
+  .spec-table :is(td, th):first-child {
+    padding-left: 7px;
+  }
+  .reason {
+    font-size: 9.5px;
+  }
+  .word-toolbar {
+    flex-wrap: wrap;
+    padding-inline: 9px;
+  }
+  .word-row {
+    grid-template-columns: 6px minmax(72px, 1fr) auto;
+    gap: 4px;
+    padding: 5px 0;
+    font-size: 9px;
+  }
+  .hex-word {
+    font-size: 9px;
+  }
+  .word-shape {
+    display: none;
+  }
+  .bit-grid {
+    grid-template-columns: repeat(16, minmax(0, 1fr));
+  }
+  .status-bar {
+    gap: 9px;
+    padding-inline: 10px;
+    font-size: 9px;
+  }
+  .status-bar .footer-tech {
+    display: none;
+  }
+  .footer-size em,
+  .footer-size {
+    font-size: 0;
+  }
+  .footer-size::after {
+    content: "Local simulation";
+    font-size: 9px;
+  }
+}
+@media (max-width: 800px) and (max-height: 500px) {
+  .overview-title {
+    display: none;
+  }
+  .overview {
+    padding-block: 3px;
+  }
+  .metric-foot {
+    display: none;
+  }
+  .metric {
+    padding-block: 4px;
+  }
+}
