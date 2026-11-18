@@ -11,9 +11,15 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck && npm test && npm run build:gem-ui
       - name: Check packaged assets are current
         run: test -z "$(git status --porcelain -- public)"
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+        env:
+          CLEAVE_REAL_UI: '1'

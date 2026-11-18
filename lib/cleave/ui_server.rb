@@ -48,7 +48,8 @@ module Cleave
                                         Logger: WEBrick::Log.new(File::NULL, WEBrick::Log::FATAL),
                                         DoNotReverseLookup: true, RequestTimeout: 5, MaxClients: 16)
       @port = @server.listeners.fetch(0).addr[1]
-      @origin = "http://127.0.0.1:#{@port}"
+      @host_header = @port == 80 ? "127.0.0.1" : "127.0.0.1:#{@port}"
+      @origin = "http://#{@host_header}"
       @url = "#{@origin}/#{@token}/"
       @server.mount_proc("/") { |req, res| respond(req, res) }
     end
@@ -102,7 +103,7 @@ module Cleave
       res["Content-Security-Policy"] = CSP
       res["Cross-Origin-Resource-Policy"] = "same-origin"
       res["X-Frame-Options"] = "DENY"
-      unless req["host"] == "127.0.0.1:#{port}" && (!req["origin"] || req["origin"] == @origin) && req["sec-fetch-site"] != "cross-site"
+      unless req["host"] == @host_header && (!req["origin"] || req["origin"] == @origin) && req["sec-fetch-site"] != "cross-site"
         res.status = 403
         res.body = "Forbidden"
         return
