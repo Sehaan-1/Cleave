@@ -81,3 +81,28 @@ The recorder observes Ruby-level `File.open`, `IO.read` / `IO.binread` (includin
 Hooks are installed process-wide once and are dormant after `stop`. Only one session may be active per process. Scope stacks are **fiber-local**: new threads and fibers default to root until explicitly wrapped with `with_spec`. A fork receives a copy of the session; the parent does not receive child events automatically. Collect the child's `report.to_h` over IPC before it exits and retain it separately with the parent's report. The report includes its PID. Traces must be captured over the entire intended boot and test run; loading Cleave itself occurs before capture starts.
 
 **Safety:** `complete` is always false. Ruby-level hooks cannot see native extensions, direct syscalls, subprocesses, all IO APIs, directory probes, or `require_relative` reliably. Unscoped concurrent work and uncollected children are also incomplete. A failed `require` is not recorded as a file dependency. A trace must never be used alone to skip tests. Later slices must define conservative fallback, process aggregation, schema and runner integration before any selection is safe.
+
+## Inventory and bitmap artifacts
+
+The Ruby library can capture repository content and persist a **versioned, incomplete** bitmap index. Capture only in a stable checkout and stop tracing before writing artifacts:
+
+```ruby
+require "cleave"
+
+# Hash tracked and non-ignored untracked Git files; include ignored generated files explicitly.
+inventory = Cleave::Inventory.capture_git(root: Dir.pwd, generated: ["generated/schema.json"])
+# Alternatively: Cleave::Inventory.capture(root: Dir.pwd, paths: ["app/model.rb", "spec/model_spec.rb"])
+index = Cleave::BitmapIndex.build(
+  inventory: inventory, root: Dir.pwd,
+  specs: ["spec/model_spec.rb"], reports: [report] # TraceReport(s) collected from this root
+)
+Cleave::Artifacts.write(".cleave", inventory: inventory, index: index)
+loaded_inventory, loaded_index = Cleave::Artifacts.read(".cleave")
+changes = loaded_inventory.diff(Cleave::Inventory.capture_git(root: Dir.pwd, generated: ["generated/schema.json"]))
+```
+
+`diff` returns sorted added, deleted, and content-modified paths; missing requested paths are omitted, making deletions observable. SHA-256 is streamed for regular files; symlinks, special files, `.git` paths, malformed paths, and files that change during hashing are rejected. Git capture requires `git` and includes non-ignored untracked files; generated files must be named explicitly. UTF-8 relative paths are required. The capture isn't a transactional filesystem snapshot and isn't hardened against a maliciously changing checkout.
+
+Spec **paths** are identities; within each index they are sorted and assigned contiguous zero-based bit positions. Positions can change when specs are added or removed, so do not combine masks from different indexes. Trace observations for absent paths are retained, including failed reads; root-scope paths are stored separately. Unknown scopes and mismatched trace roots are rejected. External paths are omitted and noted as a limitation. Multiple explicitly collected reports can be supplied, but this does not prove all processes or tests were observed.
+
+The two JSON files have explicit schemas and versions. Bitmap masks are canonical lowercase hexadecimal integers; the index binds to the inventory's content fingerprint. Reading validates fields, paths, duplicate JSON keys, IDs/ranges, and the fingerprint, and rejects unsupported versions or incomplete/mismatched pairs. Each file is replaced atomically, but the pair is **not** a single atomic transaction. A fingerprint detects a mixed pair when inventories differ; it is not an authenticity signature or a guarantee against concurrent writers. Both artifacts deliberately record `complete: false`. **Do not use this index to skip tests.** The selector, safety fallback, UI import, and CLI integration are later slices.
