@@ -32,10 +32,10 @@ module Cleave
       raise ArtifactError, "cannot invoke git: #{error.message}"
     end
 
-    def finish(root:, files:, current:, plan:, state:)
+    def finish(root:, files:, current:, plan:, state:, observed_specs:)
       errors = []
       errors << "RSpec reports were incomplete." unless state["reports_complete"]
-      errors << "RSpec reported failures outside the discovered files." unless (state["observed_failed_specs"] - files).empty?
+      errors << "RSpec reported examples outside the discovered files." unless (observed_specs - files).empty?
       begin
         after = capture(root, current.files.keys + files)
         errors << "Project files changed during verification." unless current.fingerprint == after.fingerprint

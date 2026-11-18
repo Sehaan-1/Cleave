@@ -82,11 +82,12 @@ module Cleave
           end
           # Processes have already started concurrently; wait only for our own children.
           seen_examples = Set.new
+          seen_specs = Set.new
           jobs.each do |pid, json, log, group|
             _, status = Process.wait2(pid)
             children.delete(pid)
             stream_log(log, output, groups.length > 1 ? "worker #{jobs.index { |item| item[0] == pid } + 1}" : nil)
-            parse_report(root, json, status, group, state, seen_examples)
+            parse_report(root, json, status, group, state, seen_examples, seen_specs)
           end
           if files
             after = Inventory.capture(root: root, paths: files)
@@ -97,7 +98,7 @@ module Cleave
           state["reports_complete"] = state["errors"].empty?
           if verify && plan
             state["verification"] = ShadowVerification.finish(root: root, files: verification_files,
-                                                               current: current, plan: plan, state: state)
+                                                               current: current, plan: plan, state: state, observed_specs: seen_specs.to_a)
           end
           state["outcome"] = if !state["reports_complete"] || (verify && state["verification"]["status"] == "incomplete")
             "incomplete"
@@ -178,7 +179,7 @@ module Cleave
     end
     private_class_method :stream_log
 
-    def parse_report(root, path, status, group, state, seen_examples)
+    def parse_report(root, path, status, group, state, seen_examples, seen_specs)
       data = JSON.parse(File.binread(path))
       summary = data.fetch("summary")
       examples = data.fetch("examples")
@@ -197,6 +198,7 @@ module Cleave
         spec = relative_path(root, example.fetch("file_path"))
         raise RunnerError, "example outside assigned worker files: #{spec}" if group && !group.include?(spec)
         raise RunnerError, "duplicate RSpec example: #{example['id']}" unless seen_examples.add?(example["id"])
+        seen_specs.add(spec)
         failures << spec if example["status"] == "failed"
       end
       raise RunnerError, "inconsistent RSpec failure count" unless failures.length == failed

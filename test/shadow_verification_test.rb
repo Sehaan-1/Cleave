@@ -63,6 +63,26 @@ class ShadowVerificationTest < Minitest::Test
     refute result.dig("verification", "suite_coverage_verified")
   end
 
+  def test_failing_selected_file_is_not_a_miss_but_still_fails_the_run
+    File.write(File.join(@root, "spec/a_spec.rb"), "RSpec.describe('a') { it('fails') { expect(1).to eq(2) } }\n")
+    File.write(File.join(@root, "spec/b_spec.rb"), "RSpec.describe('b') { it('passes') {} }\n")
+    result, output, = run_verify
+    assert_equal "failed", result["outcome"], output
+    assert_equal "no_observed_misses", result.dig("verification", "status")
+    assert_empty result.dig("verification", "observed_missed_failure_specs")
+    assert_equal 1, result["exit_code"]
+  end
+
+  def test_finished_comparison_rejects_examples_outside_discovery
+    files = @paths
+    current, plan = Cleave::ShadowVerification.prepare(root: @root, files: files)
+    state = { "reports_complete" => true, "observed_failed_specs" => [] }
+    audit = Cleave::ShadowVerification.finish(root: @root, files: files, current: current, plan: plan,
+                                               state: state, observed_specs: ["spec/other_spec.rb"])
+    assert_equal "incomplete", audit["status"]
+    assert_includes audit["errors"], "RSpec reported examples outside the discovered files."
+  end
+
   def test_invalid_artifact_still_runs_suite_but_is_inconclusive
     File.delete(File.join(@root, ".cleave/bitmap_index.json"))
     result, output, = run_verify
