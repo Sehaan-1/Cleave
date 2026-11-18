@@ -7,7 +7,7 @@ The Ruby engine is built in independently reviewable slices. This sequence suppl
 3. **Inventory and bitmap index**: content hashes, path-based test identities, versioned persisted artifacts and schema validation, covering additions/deletions and incomplete data. This slice produces incomplete indexes; it does not select tests.
 4. **Selection**: compare inventories and OR bitmaps with explicit safety behavior and attribution. The preview measures its actual OR time, but v1 indexes require full-suite fallback; no execution adapter or latency guarantee is provided.
 5a. **Guardrail planning**: apply Prism hazards, caller-supplied prior failures and root fallback to the diagnostic union; abort on stale or invalid spec source. v1 indexes still require the full suite and cannot authorize execution.
-6. **Parallel RSpec execution**: independently discover the full suite, persist actual run outcomes, dispatch safely with full-suite fallback and propagate failures.
+6. **RSpec execution**: run the configured suite serially by default or explicitly partition RSpec-discovered files into isolated parallel workers; persist observed outcomes and propagate failures. Full-suite fallback is mandatory, and configured-suite coverage is not verified.
 7. **Audit/telemetry and graph**: real shadow verification, honest counts/timings, and an HTML export. Verify against a real Ruby project before claiming a false-negative rate.
 8. **Workbench integration**: adapt the actual versioned artifacts to the UI and package local CLI assets once the emitter exists.
 
