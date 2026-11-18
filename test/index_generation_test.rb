@@ -157,6 +157,31 @@ class IndexGenerationTest < Minitest::Test
     end
   end
 
+  def test_abrupt_runner_death_leaves_running_marker_and_rejects_old_pair
+    result, output = run_index
+    assert_equal "passed", result["outcome"], "#{result.inspect}\n#{output}"
+    write("spec/slow_spec.rb", "RSpec.describe('slow') { it('waits') { File.write('.cleave/worker_pid', Process.pid.to_s); sleep 60 } }\n")
+    env = { "BUNDLE_GEMFILE" => File.join(@root, "Gemfile"), "BUNDLE_FROZEN" => "false" }
+    pid = Process.spawn(env, "bundle", "exec", "cleave", "run", "--trace", "--index", chdir: @root, out: File::NULL, err: File::NULL)
+    worker = nil
+    begin
+      path = File.join(@root, ".cleave/worker_pid")
+      Timeout.timeout(30) { sleep 0.05 until File.exist?(path) && !File.zero?(path) }
+      worker = Integer(File.read(path))
+      Process.kill("KILL", pid)
+      Timeout.timeout(10) { Process.wait(pid) }
+      pid = nil
+      assert_match(/running/, assert_raises(Cleave::ArtifactError) { Cleave::IndexProvenance.inspect_pair(root: @root) }.message)
+      assert_match(/running/, assert_raises(Cleave::ArtifactError) { Cleave::DiagnosticPlan.build(root: @root, output: StringIO.new) }.message)
+    ensure
+      Process.kill("KILL", -worker) rescue nil if worker
+      if pid
+        Process.kill("KILL", pid) rescue nil
+        Process.wait(pid) rescue nil
+      end
+    end
+  end
+
   def test_crash_does_not_publish_pair
     write("spec/a_spec.rb", "RSpec.describe('crash') { it('exits') { exit! 7 } }\n")
     result, output = run_index
