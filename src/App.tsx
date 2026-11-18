@@ -15,8 +15,9 @@ const subscribe = (f: () => void) => {
 export default function App() {
   const compact = useSyncExternalStore(subscribe, () => media.matches);
   const [pane, setPane] = useState("map");
-  const [artifacts, setArtifacts] = useState(false);
-  if (artifacts) return <ArtifactInspector onBack={() => setArtifacts(false)} compact={compact} />;
+  const localMode = document.querySelector('meta[name="cleave-local-ui"]') !== null;
+  const [artifacts, setArtifacts] = useState(localMode);
+  if (artifacts) return <ArtifactInspector onBack={() => setArtifacts(false)} compact={compact} localMode={localMode} />;
   return (
     <div className="app-frame">
       <CommandBar onOpenArtifacts={() => setArtifacts(true)} />

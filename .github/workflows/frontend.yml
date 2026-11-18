@@ -1,0 +1,19 @@
+name: Frontend checks
+on:
+  push:
+  pull_request:
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck && npm test && npm run build:gem-ui
+      - name: Check packaged assets are current
+        run: test -z "$(git status --porcelain -- public)"
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
