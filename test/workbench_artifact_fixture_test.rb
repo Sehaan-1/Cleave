@@ -18,4 +18,15 @@ class WorkbenchArtifactFixtureTest < Minitest::Test
     assert_equal inventory.to_h, JSON.parse(File.read(File.join(fixtures, "inventory.json")))
     assert_equal index.to_h, JSON.parse(File.read(File.join(fixtures, "bitmap_index.json")))
   end
+
+  def test_unicode_fixture_uses_the_ruby_canonical_json_fingerprint
+    paths = ["app/eol\n.rb", "app/\uE000.rb", "app/\u{10000}.rb", "app/x\u2028.rb", "spec/alpha_spec.rb"]
+    inventory = Cleave::Inventory.new(paths.to_h { |path| [path, "a" * 64] })
+    index = Cleave::BitmapIndex.new(inventory_fingerprint: inventory.fingerprint, specs: ["spec/alpha_spec.rb"],
+                                   masks: {}, root_paths: [], limitations: ["partial"])
+    fixtures = File.expand_path("../tests/fixtures/unicode-artifacts", __dir__)
+    assert_equal inventory.to_h, JSON.parse(File.read(File.join(fixtures, "inventory.json")))
+    assert_equal index.to_h, JSON.parse(File.read(File.join(fixtures, "bitmap_index.json")))
+  end
+
 end
