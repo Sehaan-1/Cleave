@@ -66,6 +66,35 @@ class RSpecRunnerTest < Minitest::Test
     assert_equal result, persisted
   end
 
+  def test_parallel_workers_run_concurrently_in_distinct_processes
+    %w[a b].each do |name|
+      other = name == "a" ? "b" : "a"
+      spec("#{name}_spec.rb", <<~RUBY)
+        RSpec.describe("#{name}") do
+          it "overlaps another worker" do
+            File.write("ready-#{name}", Process.pid.to_s)
+            deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 8
+            until File.exist?("ready-#{other}") || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+              sleep 0.02
+            end
+            expect(File.exist?("ready-#{other}")).to be(true)
+          end
+        end
+      RUBY
+    end
+    result, output, = run_suite(workers: 2)
+    assert_equal "passed", result["outcome"], "#{result.inspect}\n#{output}"
+    assert_equal 2, result["actual_workers"]
+    refute_equal File.read(File.join(@root, "ready-a")), File.read(File.join(@root, "ready-b"))
+  end
+
+  def test_parallel_refuses_ambiguous_rspec_selector_filename
+    spec("odd[1]_spec.rb", "RSpec.describe('x') { it('works') { expect(true).to be(true) } }\n")
+    result, _, = run_suite(workers: 2)
+    assert_equal "incomplete", result["outcome"]
+    assert_match(/selector characters/, result["errors"].join)
+  end
+
   def test_failing_discovery_and_zero_examples_fail_closed
     spec("broken_spec.rb", "class InvalidRuby\n")
     result, _, persisted = run_suite(workers: 2)
