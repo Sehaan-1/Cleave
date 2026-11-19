@@ -103,6 +103,7 @@ class RSpecTraceCaptureTest < Minitest::Test
   end
 
   def test_forked_child_cannot_replace_parent_trace
+    skip "Process.fork is unavailable on this platform" if Gem.win_platform?
     write("child.json", "{}")
     write("parent.json", "{}")
     write("spec/fork_spec.rb", <<~RUBY)
@@ -133,8 +134,12 @@ class RSpecTraceCaptureTest < Minitest::Test
     File.write(path, JSON.generate(capture))
     Dir.mktmpdir { |other| assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.read(path, root: other) } }
     File.delete(path)
-    File.symlink(File.join(@root, "spec/example_spec.rb"), path)
-    assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.read(path, root: @root) }
+    begin
+      File.symlink(File.join(@root, "spec/example_spec.rb"), path)
+      assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.read(path, root: @root) }
+    rescue NotImplementedError, Errno::EACCES
+      skip "symlink creation requires privileges unavailable on this platform"
+    end
     assert_raises(Cleave::RunnerError) { Cleave::RSpecRunner.run(root: @root, trace: true) }
   end
 
@@ -149,6 +154,7 @@ class RSpecTraceCaptureTest < Minitest::Test
   end
 
   def test_interrupt_invalidates_last_trace
+    skip "Windows delivers Ctrl+C to the whole console, not a single child" if Gem.win_platform?
     write("spec/slow_spec.rb", "RSpec.describe('slow') { it('waits') { File.write('started', 'yes'); sleep 60 } }\n")
     env = { "BUNDLE_GEMFILE" => File.join(@root, "Gemfile"), "BUNDLE_FROZEN" => "false" }
     pid = Process.spawn(env, "bundle", "exec", "cleave", "run", "--trace", chdir: @root, out: File::NULL, err: File::NULL)

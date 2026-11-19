@@ -23,7 +23,7 @@ module Cleave
       end
       stdout, stderr, status = Open3.capture3("git", "-C", root, "rev-parse", "--show-toplevel")
       raise ArtifactError, "git root unavailable: #{stderr.strip}" unless status.success?
-      raise ArtifactError, "index generation requires the Git project root" unless File.realpath(stdout.strip) == root
+      raise ArtifactError, "index generation requires the Git project root" unless File.identical?(stdout.strip, root)
       inventory = ShadowVerification.capture(root, paths)
       missing = paths - inventory.files.keys
       raise ArtifactError, "included files are missing: #{missing.join(', ')}" unless missing.empty?

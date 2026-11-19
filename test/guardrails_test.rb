@@ -114,7 +114,11 @@ class GuardrailsTest < Minitest::Test
     snapshot = capture
     File.delete(File.join(@root, "spec/b_spec.rb"))
     assert_raises(Cleave::ArtifactError) { plan(current: snapshot) }
-    File.symlink(File.join(@root, "spec/a_spec.rb"), File.join(@root, "spec/b_spec.rb"))
+    begin
+      File.symlink(File.join(@root, "spec/a_spec.rb"), File.join(@root, "spec/b_spec.rb"))
+    rescue NotImplementedError, Errno::EACCES
+      skip "symlink creation requires privileges unavailable on this platform"
+    end
     assert_raises(Cleave::ArtifactError) { plan(current: snapshot) }
   end
 

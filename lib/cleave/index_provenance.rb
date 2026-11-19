@@ -103,10 +103,12 @@ module Cleave
       path = File.join(directory, NAME)
       raise ArtifactError, "index provenance must not be a symlink" if File.symlink?(path)
       Tempfile.create([".index-provenance-", ".tmp"], directory) do |file|
+        file.binmode
         file.write(JSON.pretty_generate(data) + "\n")
         file.flush
         file.fsync
         raise ArtifactError, "index provenance must not be a symlink" if File.symlink?(path)
+        file.close
         File.rename(file.path, path)
       end
     end
@@ -116,7 +118,8 @@ module Cleave
       raise ArtifactError, "file must not be a symlink: #{File.basename(path)}" if File.symlink?(path)
       flags = File::RDONLY
       flags |= File::NOFOLLOW if File.const_defined?(:NOFOLLOW)
-      flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK)
+      # Windows File::NONBLOCK is 1, the write-only flag, so only OR it on POSIX.
+      flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK) && !Gem.win_platform?
       File.open(path, flags) do |file|
         raise ArtifactError, "file must be regular: #{File.basename(path)}" unless file.stat.file?
         yield file

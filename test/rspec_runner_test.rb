@@ -187,12 +187,17 @@ class RSpecRunnerTest < Minitest::Test
     assert_raises(ArgumentError) { Cleave::RSpecRunner.run(root: @root, workers: 0) }
     assert_raises(ArgumentError) { Cleave::RSpecRunner.run(root: @root, workers: 33) }
     Dir.mktmpdir do |outside|
-      File.symlink(outside, File.join(@root, ".cleave"))
+      begin
+        File.symlink(outside, File.join(@root, ".cleave"))
+      rescue NotImplementedError, Errno::EACCES
+        skip "symlink creation requires privileges unavailable on this platform"
+      end
       assert_raises(Cleave::RunnerError) { Cleave::RSpecRunner.run(root: @root) }
     end
   end
 
   def test_interrupt_terminates_workers_and_persists_incomplete_status
+    skip "Windows delivers Ctrl+C to the whole console, not a single child" if Gem.win_platform?
     spec("a_spec.rb", "RSpec.describe('slow') { it('waits') { File.write('started', 'yes'); sleep 60 } }\n")
     env = { "BUNDLE_GEMFILE" => File.join(@root, "Gemfile"), "BUNDLE_FROZEN" => "false" }
     FileUtils.mkdir_p(File.join(@root, ".cleave"))

@@ -116,7 +116,11 @@ class IndexGenerationTest < Minitest::Test
     assert_equal "incomplete", result["outcome"], "#{result.inspect}\n#{output}"
     assert_equal 2, result["example_count"]
     assert_match(/cannot include Cleave state/, result.dig("index", "error"))
-    File.symlink(File.join(@root, "a.json"), File.join(@root, ".cleave/inventory.json"))
+    begin
+      File.symlink(File.join(@root, "a.json"), File.join(@root, ".cleave/inventory.json"))
+    rescue NotImplementedError, Errno::EACCES
+      skip "symlink creation requires privileges unavailable on this platform"
+    end
     result, output = run_index
     assert_equal "incomplete", result["outcome"], "#{result.inspect}\n#{output}"
     assert_match(/symlink/, result.dig("index", "error"))
@@ -128,13 +132,18 @@ class IndexGenerationTest < Minitest::Test
     assert_equal "incomplete", result["outcome"], "#{result.inspect}\n#{output}"
     assert_equal 2, result["example_count"]
     assert_match(/included files are missing/, result.dig("index", "error"))
-    File.symlink(File.join(@root, "a.json"), File.join(@root, "ignored/link.json"))
+    begin
+      File.symlink(File.join(@root, "a.json"), File.join(@root, "ignored/link.json"))
+    rescue NotImplementedError, Errno::EACCES
+      skip "symlink creation requires privileges unavailable on this platform"
+    end
     result, output = run_index(includes: ["ignored/link.json"])
     assert_equal "incomplete", result["outcome"], "#{result.inspect}\n#{output}"
     assert_match(/symlink/, result.dig("index", "error"))
   end
 
   def test_interrupt_records_incomplete_index_without_publishing
+    skip "Windows delivers Ctrl+C to the whole console, not a single child" if Gem.win_platform?
     write("spec/slow_spec.rb", "RSpec.describe('slow') { it('waits') { File.write('.cleave/started', 'yes'); sleep 60 } }\n")
     env = { "BUNDLE_GEMFILE" => File.join(@root, "Gemfile"), "BUNDLE_FROZEN" => "false" }
     pid = Process.spawn(env, "bundle", "exec", "cleave", "run", "--trace", "--index", chdir: @root, out: File::NULL, err: File::NULL)
@@ -168,7 +177,12 @@ class IndexGenerationTest < Minitest::Test
       path = File.join(@root, ".cleave/worker_pid")
       Timeout.timeout(30) { sleep 0.05 until File.exist?(path) && !File.zero?(path) }
       worker = Integer(File.read(path))
-      Process.kill("KILL", pid)
+      # Process.spawn returns the batch launcher pid on Windows, so kill the tree.
+      if Gem.win_platform?
+        system("taskkill", "/F", "/T", "/PID", pid.to_s, out: File::NULL, err: File::NULL)
+      else
+        Process.kill("KILL", pid)
+      end
       Timeout.timeout(10) { Process.wait(pid) }
       pid = nil
       assert_match(/running/, assert_raises(Cleave::ArtifactError) { Cleave::IndexProvenance.inspect_pair(root: @root) }.message)
@@ -240,9 +254,13 @@ class IndexGenerationTest < Minitest::Test
     File.write(path, saved.sub('"version": 1', '"version": 1, "version": 1'))
     assert_match(/duplicate/, assert_raises(Cleave::ArtifactError) { Cleave::IndexProvenance.inspect_pair(root: @root) }.message)
     File.delete(path)
-    File.symlink(File.join(@root, ".cleave/inventory.json"), path)
-    assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { Cleave::IndexProvenance.inspect_pair(root: @root) }.message)
-    assert_raises(Cleave::ArtifactError) { run_index }
+    begin
+      File.symlink(File.join(@root, ".cleave/inventory.json"), path)
+      assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { Cleave::IndexProvenance.inspect_pair(root: @root) }.message)
+      assert_raises(Cleave::ArtifactError) { run_index }
+    rescue NotImplementedError, Errno::EACCES
+      skip "symlink creation requires privileges unavailable on this platform"
+    end
   end
 
   def test_invalid_marker_cannot_claim_coverage_or_escape_size_limit

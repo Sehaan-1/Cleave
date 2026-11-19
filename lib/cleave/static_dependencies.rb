@@ -30,7 +30,8 @@ module Cleave
       paths.each do |path|
         flags = File::RDONLY
         flags |= File::NOFOLLOW if File.const_defined?(:NOFOLLOW)
-        flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK)
+        # Windows File::NONBLOCK is 1, the write-only flag, so only OR it on POSIX.
+        flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK) && !Gem.win_platform?
         content = File.open(File.join(root, path), flags) do |file|
           raise ArtifactError, "static source must be a regular file: #{path}" unless file.stat.file?
           file.read(MAX_FILE_BYTES + 1) || +""

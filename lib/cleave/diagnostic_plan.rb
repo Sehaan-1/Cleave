@@ -27,7 +27,7 @@ module Cleave
       raise ArtifactError, "cannot include Cleave state" if includes.any? { |path| internal?(path) }
       stdout, stderr, status = Open3.capture3("git", "-C", root, "rev-parse", "--show-toplevel")
       raise ArtifactError, "git root unavailable: #{stderr.strip}" unless status.success?
-      raise ArtifactError, "planning requires the Git project root" unless File.realpath(stdout.strip) == root
+      raise ArtifactError, "planning requires the Git project root" unless File.identical?(stdout.strip, root)
       state = File.join(root, ".cleave")
       raise ArtifactError, ".cleave must be a real directory, not a symlink" if File.symlink?(state) || !File.directory?(state)
       lock_path = File.join(state, "runner.lock")
@@ -73,7 +73,8 @@ module Cleave
       raise ArtifactError, "artifact must not be a symlink: #{File.basename(path)}" if File.symlink?(path)
       flags = File::RDONLY
       flags |= File::NOFOLLOW if File.const_defined?(:NOFOLLOW)
-      flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK)
+      # Windows File::NONBLOCK is 1, the write-only flag, so only OR it on POSIX.
+      flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK) && !Gem.win_platform?
       File.open(path, flags) do |file|
         raise ArtifactError, "artifact must be a regular file: #{File.basename(path)}" unless file.stat.file?
         bytes = file.read(MAX_ARTIFACT_BYTES + 1) || +""

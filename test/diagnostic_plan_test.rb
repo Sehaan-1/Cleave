@@ -179,8 +179,12 @@ class DiagnosticPlanTest < Minitest::Test
     assert_raises(Cleave::ArtifactError) { build(previous_failures: true) }
     File.delete(path)
     assert_raises(Cleave::ArtifactError) { build(previous_failures: true) }
-    File.symlink(File.join(@root, "a.json"), path)
-    assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { build(previous_failures: true) }.message)
+    begin
+      File.symlink(File.join(@root, "a.json"), path)
+      assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { build(previous_failures: true) }.message)
+    rescue NotImplementedError, Errno::EACCES
+      # symlink creation requires privileges unavailable on this platform
+    end
     assert_raises(ArgumentError) { Cleave::UIServer.new(root: @root, previous_failures: true) }
   end
 
@@ -246,9 +250,13 @@ class DiagnosticPlanTest < Minitest::Test
     assert_raises(Cleave::ArtifactError) { build }
     File.delete(index_path)
     assert_raises(Cleave::ArtifactError) { build }
-    File.symlink(File.join(@root, "a.json"), index_path)
-    assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { build }.message)
-    File.delete(index_path)
+    begin
+      File.symlink(File.join(@root, "a.json"), index_path)
+      assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { build }.message)
+      File.unlink(index_path)
+    rescue NotImplementedError, Errno::EACCES
+      # symlink creation requires privileges unavailable on this platform
+    end
     File.binwrite(index_path, content)
     File.open(File.join(@root, ".cleave/runner.lock"), File::RDWR) do |lock|
       lock.flock(File::LOCK_EX)

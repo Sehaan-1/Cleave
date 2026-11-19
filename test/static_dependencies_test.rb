@@ -85,7 +85,11 @@ class StaticDependenciesTest < Minitest::Test
     write("app/child.rb", "#" * (Cleave::StaticDependencies::MAX_FILE_BYTES + 1))
     assert_match(/size limit/, assert_raises(Cleave::ArtifactError) { plan }.message)
     File.delete(File.join(@root, "app/child.rb"))
-    File.symlink(File.join(@root, "app/entry.rb"), File.join(@root, "app/child.rb"))
+    begin
+      File.symlink(File.join(@root, "app/entry.rb"), File.join(@root, "app/child.rb"))
+    rescue NotImplementedError, Errno::EACCES
+      skip "symlink creation requires privileges unavailable on this platform"
+    end
     assert_raises(Cleave::ArtifactError) { plan(snapshot) }
   end
 

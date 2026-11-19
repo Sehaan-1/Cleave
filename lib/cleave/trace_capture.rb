@@ -29,7 +29,10 @@ module Cleave
     def report_from_h(data, root:, pid: nil)
       ArtifactValidation.keys!(data, %w[root pid events limitations complete], "trace report")
       raise ArtifactError, "trace root mismatch" unless data["root"] == File.realpath(root)
-      raise ArtifactError, "trace process mismatch" unless data["pid"].is_a?(Integer) && data["pid"].positive? && (!pid || data["pid"] == pid)
+      # Windows runs batch launchers, so the traced interpreter pid differs
+      # from the pid Process.spawn returned for the launcher.
+      pid_matches = pid.nil? || data["pid"] == pid || Gem.win_platform?
+      raise ArtifactError, "trace process mismatch" unless data["pid"].is_a?(Integer) && data["pid"].positive? && pid_matches
       raise ArtifactError, "trace cannot claim complete coverage" unless data["complete"] == false
       limitations = data["limitations"]
       ArtifactValidation.sorted_unique_strings!(limitations, "trace limitations")
@@ -78,7 +81,8 @@ module Cleave
         raise ArtifactError, "fork report must not be a symlink" if File.symlink?(path)
         flags = File::RDONLY
         flags |= File::NOFOLLOW if File.const_defined?(:NOFOLLOW)
-        flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK)
+        # Windows File::NONBLOCK is 1, the write-only flag, so only OR it on POSIX.
+        flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK) && !Gem.win_platform?
         content = File.open(path, flags) do |file|
           raise ArtifactError, "fork report must be a regular file" unless file.stat.file?
           file.read(MAX_BYTES + 1) || +""

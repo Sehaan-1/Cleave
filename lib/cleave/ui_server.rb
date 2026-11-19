@@ -97,7 +97,9 @@ module Cleave
       raise ArtifactError, "artifact must be a regular file: #{File.basename(path)}" unless File.lstat(path).file?
       flags = File::RDONLY
       flags |= File::NOFOLLOW if File.const_defined?(:NOFOLLOW)
-      flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK)
+      # On Windows File::NONBLOCK is 1, which is the write-only access flag,
+      # so OR-ing it into RDONLY would open the artifact for writing.
+      flags |= File::NONBLOCK if File.const_defined?(:NONBLOCK) && !Gem.win_platform?
       File.open(path, flags) do |file|
         raise ArtifactError, "artifact must be a regular file: #{File.basename(path)}" unless file.stat.file?
         content = file.read(MAX_ARTIFACT_BYTES + 1) || +""

@@ -72,9 +72,13 @@ class UIServerTest < Minitest::Test
     index = File.join(@root, ".cleave/bitmap_index.json")
     File.delete(index)
     assert_match(/incomplete/, assert_raises(Cleave::ArtifactError) { Cleave::UIServer.new(root: @root) }.message)
-    File.symlink(File.join(@root, ".cleave/inventory.json"), index)
-    assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { Cleave::UIServer.new(root: @root) }.message)
-    File.delete(index)
+    begin
+      File.symlink(File.join(@root, ".cleave/inventory.json"), index)
+      assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { Cleave::UIServer.new(root: @root) }.message)
+    rescue NotImplementedError, Errno::EACCES
+      # symlink creation requires privileges unavailable on this platform
+    end
+    File.delete(index) if File.exist?(index) || File.symlink?(index)
     File.write(index, "a" * (Cleave::UIServer::MAX_ARTIFACT_BYTES + 1))
     assert_match(/exceeds/, assert_raises(Cleave::ArtifactError) { Cleave::UIServer.new(root: @root) }.message)
     File.write(index, "")
@@ -107,7 +111,8 @@ class UIServerTest < Minitest::Test
       assert_equal "200", request(url, path: uri.path + "artifacts/bitmap_index.json").code
     ensure
       if wait
-        Process.kill("INT", wait.pid) if wait.alive?
+        # Ctrl+C is console-wide on Windows and would kill the test process.
+        Process.kill(Gem.win_platform? ? "KILL" : "INT", wait.pid) if wait.alive?
         begin
           Timeout.timeout(10) { wait.value }
         rescue Timeout::Error

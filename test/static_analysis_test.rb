@@ -107,7 +107,11 @@ class StaticAnalysisTest < Minitest::Test
       File.write(File.join(root, "node_modules", "broken", "bad.rb"), "class Broken\n")
       File.write(File.join(root, ".git", "broken", "bad.rb"), "class Broken\n")
       File.write(File.join(root, "spec", "good_spec.rb"), "RSpec.describe(X) {}\n")
-      File.symlink(File.join(root, "spec", "good_spec.rb"), File.join(root, "link.rb"))
+      begin
+        File.symlink(File.join(root, "spec", "good_spec.rb"), File.join(root, "link.rb"))
+      rescue NotImplementedError, Errno::EACCES
+        skip "symlink creation requires privileges unavailable on this platform"
+      end
       assert_equal ["spec/good_spec.rb"], Cleave::StaticAnalysis.scan(root).map(&:path)
       File.write(File.join(root, "bad.rb"), "class Nope\n")
       assert_raises(Cleave::ParseError) { Cleave::StaticAnalysis.scan(root) }

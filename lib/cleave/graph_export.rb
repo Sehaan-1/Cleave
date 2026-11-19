@@ -25,7 +25,7 @@ module Cleave
       }
       # Never let artifact data break out of the script element or HTML parser.
       json = JSON.generate(payload).gsub(/[<>&\u2028\u2029]/) { |char| format('\\u%04x', char.ord) }
-      template = File.binread(File.join(__dir__, "graph_template.html")).force_encoding(Encoding::UTF_8)
+      template = File.binread(File.join(__dir__, "graph_template.html")).force_encoding(Encoding::UTF_8).gsub("\r\n", "\n")
       raise ArtifactError, "invalid graph template" unless template.scan("__CLEAVE_GRAPH_DATA__").length == 1
       template.sub("__CLEAVE_GRAPH_DATA__") { json }
     end
@@ -40,10 +40,12 @@ module Cleave
       raise ArtifactError, "output must not be a symlink" if File.symlink?(target)
       raise ArtifactError, "output must be a regular file" if File.exist?(target) && !File.file?(target)
       Tempfile.create([".cleave-graph-", ".tmp"], parent) do |file|
+        file.binmode
         file.write(html)
         file.flush
         file.fsync
         raise ArtifactError, "output must not be a symlink" if File.symlink?(target)
+        file.close
         File.rename(file.path, target)
       end
       target

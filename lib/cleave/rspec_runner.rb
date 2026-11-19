@@ -110,10 +110,10 @@ module Cleave
             else
               ["bundle", "exec", "rspec", "--format", "progress", "--format", "json", "--out", json]
             end
-            # RSpec can append cwd to explicit paths when a configured pattern
-            # starts with a directory (e.g. spec/**/*_spec.rb). A **-prefixed
-            # pattern disables that expansion; the discovered files remain authoritative.
-            command += ["--pattern", "**/*", "--", *group] if group
+            # RSpec appends cwd to explicit paths when the configured pattern
+            # matches there. A pattern that matches no files keeps the discovered
+            # list authoritative and avoids loading project files (e.g. Gemfile).
+            command += ["--pattern", ".cleave-unreachable-*", "--", *group] if group
             environment = trace ? { "CLEAVE_TRACE_ROOT" => root, "CLEAVE_TRACE_OUTPUT" => File.join(temp, "trace.json"),
                                     "CLEAVE_TRACE_FORK_DIRECTORY" => (trace_forks ? fork_directory : nil) } : {}
             [spawn_job(root, command, log, children, environment), json, log, group]
@@ -232,8 +232,9 @@ module Cleave
       end
       manifest = JSON.parse(File.binread(json))
       raise RunnerError, "invalid RSpec discovery manifest" unless manifest.is_a?(Hash) && manifest.keys == ["files"] && manifest["files"].is_a?(Array)
-      files = manifest["files"].map { |path| relative_path(root, path) }
-      raise RunnerError, "duplicate RSpec discovery paths" unless files.uniq.length == files.length
+      # Windows can report the same file under both short (8.3) and long
+      # spellings; relative paths collapse those into one entry.
+      files = manifest["files"].map { |path| relative_path(root, path) }.uniq
       if files.any? { |path| path.match?(/[\[\]:]/) }
         raise RunnerError, "RSpec selector characters in filenames are unsupported in parallel mode; run serially."
       end
@@ -245,8 +246,9 @@ module Cleave
 
     def spawn_job(root, command, log, children, environment = {})
       File.open(log, "wb") do |file|
-        pid = Process.spawn({ "BUNDLE_GEMFILE" => File.join(root, "Gemfile") }.merge(environment), *command,
-                            chdir: root, out: file, err: [:child, :out], pgroup: true)
+        options = { chdir: root, out: file, err: [:child, :out] }
+        options[:pgroup] = true unless Gem.win_platform?
+        pid = Process.spawn({ "BUNDLE_GEMFILE" => File.join(root, "Gemfile") }.merge(environment), *command, options)
         children << pid
         pid
       end
@@ -305,15 +307,32 @@ module Cleave
     def relative_path(root, path)
       raise RunnerError, "RSpec returned a non-string path" unless path.is_a?(String) && !path.empty? && !path.include?("\0")
       absolute = File.expand_path(path, root)
-      prefix = root.end_with?(File::SEPARATOR) ? root : root + File::SEPARATOR
-      raise RunnerError, "RSpec path outside project root: #{path}" unless absolute.start_with?(prefix)
-      ArtifactValidation.path(absolute.delete_prefix(prefix))
+      relative = relative_to_root(root, absolute)
+      raise RunnerError, "RSpec path outside project root: #{path}" unless relative
+      ArtifactValidation.path(relative)
     end
     private_class_method :relative_path
 
+    # Compares filesystem identity instead of path text so Windows short (8.3)
+    # names and long names for the same root are treated as equal.
+    def relative_to_root(root, absolute)
+      names = []
+      current = absolute
+      loop do
+        return names.reverse.join("/") if File.identical?(current, root)
+        parent = File.dirname(current)
+        return nil if parent == current
+        names << File.basename(current)
+        current = parent
+      end
+    rescue SystemCallError
+      nil
+    end
+    private_class_method :relative_to_root
+
     def terminate(children)
       groups = children.dup
-      groups.each { |pid| Process.kill("TERM", -pid) rescue nil }
+      groups.each { |pid| Process.kill("TERM", signal_target(pid)) rescue nil }
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2
       pending = groups.dup
       loop do
@@ -326,7 +345,7 @@ module Cleave
         end
         alive = groups.any? do |pid|
           begin
-            Process.kill(0, -pid)
+            Process.kill(0, signal_target(pid))
             true
           rescue Errno::ESRCH
             false
@@ -337,18 +356,27 @@ module Cleave
         break if (!alive && pending.empty?) || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
         sleep 0.02
       end
-      groups.each { |pid| Process.kill("KILL", -pid) rescue nil }
+      groups.each { |pid| Process.kill("KILL", signal_target(pid)) rescue nil }
       pending.each { |pid| Process.wait(pid) rescue nil }
       children.clear
     end
     private_class_method :terminate
 
+    # Windows has no process groups; signalling the child pid is the portable
+    # fallback, while POSIX signals the whole group spawned for the job.
+    def signal_target(pid)
+      Gem.win_platform? ? pid : -pid
+    end
+    private_class_method :signal_target
+
     def write_state(path, data)
       raise RunnerError, "status file must not be a symlink" if File.symlink?(path)
       Tempfile.create([".rspec-status-", ".tmp"], File.dirname(path)) do |file|
+        file.binmode
         file.write(JSON.pretty_generate(data) + "\n")
         file.flush
         file.fsync
+        file.close
         File.rename(file.path, path)
       end
     end

@@ -60,9 +60,13 @@ class GraphExportTest < Minitest::Test
     File.delete(output)
     victim = File.join(@root, "victim")
     File.write(victim, "safe")
-    File.symlink(victim, output)
-    assert_raises(Cleave::ArtifactError) { Cleave::GraphExport.write(output, inventory: @inventory, index: @index) }
-    assert_equal "safe", File.read(victim)
+    begin
+      File.symlink(victim, output)
+      assert_raises(Cleave::ArtifactError) { Cleave::GraphExport.write(output, inventory: @inventory, index: @index) }
+      assert_equal "safe", File.read(victim)
+    rescue NotImplementedError, Errno::EACCES
+      # symlink creation requires privileges unavailable on this platform
+    end
     assert_raises(ArgumentError) { Cleave::GraphExport.write(File.join(@root, "graph.txt"), inventory: @inventory, index: @index) }
     Dir.mkdir(File.join(@root, "directory.html"))
     assert_raises(Cleave::ArtifactError) { Cleave::GraphExport.write(File.join(@root, "directory.html"), inventory: @inventory, index: @index) }

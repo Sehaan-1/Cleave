@@ -64,7 +64,11 @@ class ArtifactsTest < Minitest::Test
     end
     assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: ["\xFF".dup.force_encoding(Encoding::UTF_8)]) }
     assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: ["filename".b]) }
-    File.symlink(File.join(@root, "config"), File.join(@root, "link"))
+    begin
+      File.symlink(File.join(@root, "config"), File.join(@root, "link"))
+    rescue NotImplementedError, Errno::EACCES
+      skip "symlink creation requires privileges unavailable on this platform"
+    end
     assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: ["link/rails.yml"]) }
     assert_raises(Cleave::ArtifactError) { Cleave::Inventory.capture(root: @root, paths: ["config"]) }
     if system("mkfifo", File.join(@root, "pipe"))

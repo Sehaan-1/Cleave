@@ -90,6 +90,7 @@ class RSpecForkTraceTest < Minitest::Test
   end
 
   def test_default_trace_does_not_enable_forks_even_if_environment_is_set
+    skip "Process.fork is unavailable on this platform" if Gem.win_platform?
     write("child.json", "{}")
     write("spec/fork_spec.rb", "RSpec.describe('fork') { it('forks') { pid = fork { File.read('child.json') }; Process.wait(pid) } }\n")
     env = { "BUNDLE_GEMFILE" => File.join(@root, "Gemfile"), "BUNDLE_FROZEN" => "false", "CLEAVE_TRACE_FORK_DIRECTORY" => @root }
@@ -101,6 +102,7 @@ class RSpecForkTraceTest < Minitest::Test
   end
 
   def test_cli_and_combinations
+    skip "Process.fork is unavailable on this platform" if Gem.win_platform?
     write("spec/example_spec.rb", "RSpec.describe('ok') { it('passes') {} }\n")
     env = { "BUNDLE_GEMFILE" => File.join(@root, "Gemfile"), "BUNDLE_FROZEN" => "false" }
     output, status = Open3.capture2e(env, "bundle", "exec", "cleave", "run", "--trace", "--trace-forks", chdir: @root)
@@ -125,11 +127,18 @@ class RSpecForkTraceTest < Minitest::Test
     assert_includes merged.events, ["spec/a_spec.rb", "child.json", "io_read", "success"]
     assert_equal ["child incomplete", "parent incomplete"], merged.limitations
     File.write(path, JSON.generate("report" => child.to_h.merge("pid" => 333)))
-    assert_match(/process mismatch/, assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.merge_forks(parent, directory, root: root) }.message)
+    # Windows batch launchers make the traced pid unverifiable.
+    unless Gem.win_platform?
+      assert_match(/process mismatch/, assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.merge_forks(parent, directory, root: root) }.message)
+    end
     File.delete(path)
-    File.symlink(File.join(@root, "Gemfile"), path)
-    assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.merge_forks(parent, directory, root: root) }.message)
-    File.delete(path)
+    begin
+      File.symlink(File.join(@root, "Gemfile"), path)
+      assert_match(/symlink/, assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.merge_forks(parent, directory, root: root) }.message)
+      File.delete(path)
+    rescue NotImplementedError, Errno::EACCES
+      # symlink creation requires privileges unavailable on this platform
+    end
     File.write(File.join(directory, "invalid.json"), "{}")
     assert_match(/filename/, assert_raises(Cleave::ArtifactError) { Cleave::TraceCapture.merge_forks(parent, directory, root: root) }.message)
   end

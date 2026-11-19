@@ -135,7 +135,9 @@ module Cleave
         end
         after = file.stat
         current = File.lstat(path)
-        identity = ->(s) { [s.dev, s.ino, s.size, s.mtime, s.ctime] }
+        # Windows reports dev 0 for an open handle and a drive number via lstat,
+        # so device identity is not comparable across stat sources there.
+        identity = ->(s) { [s.ino, s.size, s.mtime, s.ctime] }
         unless !current.symlink? && identity.call(before) == identity.call(after) && identity.call(after) == identity.call(current)
           raise ArtifactError, "file changed during hashing: #{relative}"
         end
@@ -286,9 +288,11 @@ module Cleave
       FileUtils.mkdir_p(directory)
       [["inventory.json", inventory.to_h], ["bitmap_index.json", index.to_h]].each do |name, payload|
         Tempfile.create([".cleave-", ".tmp"], directory) do |file|
+          file.binmode
           file.write(JSON.pretty_generate(payload) + "\n")
           file.flush
           file.fsync
+          file.close
           File.rename(file.path, File.join(directory, name))
         end
       end
