@@ -2,6 +2,8 @@
 
 Cleave is a selective test execution workbench and diagnostic toolkit for Ruby and RSpec. It combines Prism static AST analysis, scoped runtime file access tracing, compact bitmap indexes, and an interactive browser-based workbench to analyze and optimize test suite execution.
 
+**Live Demo:** [https://sehaan-1.github.io/Cleave/](https://sehaan-1.github.io/Cleave/)
+
 ---
 
 ## Screenshots
