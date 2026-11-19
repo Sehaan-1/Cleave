@@ -4,6 +4,40 @@ Cleave is a selective test execution workbench and diagnostic toolkit for Ruby a
 
 ---
 
+## Screenshots
+
+### Selection overview and blast radius
+
+Dependency map, inventory, and execution matrix for a surgical edit. The status bar reports the live bitmap union and CI compute saved.
+
+![Cleave workbench showing the selection overview, dependency map, and execution matrix](docs/screenshots/workbench-overview.png)
+
+### Prism guardrails on a new migration
+
+Scenario C adds a migration with no baseline reads. Prism `Dir.glob` guardrails keep the affected linter specs in scope instead of silently dropping them.
+
+![Scenario C showing Prism guardrail edges and ten selected linter specs](docs/screenshots/guardrails-scenario.png)
+
+### Bitmap words
+
+Inspect the 64-bit `MANDATORY_GUARDRAIL_MASK`, `PREV_FAILED_MASK`, and `FINAL_EXECUTION_MASK` words for the current selection.
+
+![Bitmap words view showing guardrail, previous-failure, and final execution masks](docs/screenshots/bitmap-words.png)
+
+### Ruby loopback artifact inspector
+
+`bundle exec cleave ui` serves the packaged workbench directly from Ruby. Here it inspects a real artifact pair with coverage limits and recorded observations.
+
+![Artifact inspector served by the Ruby loopback UI server](docs/screenshots/ruby-loopback-artifacts.png)
+
+### Compact layout
+
+The workbench reflows to a panel switcher on small screens without horizontal page overflow.
+
+![Compact Cleave workbench at 390 by 844 pixels](docs/screenshots/compact-mobile.png)
+
+---
+
 ## Quick Start
 
 ### 1. Interactive Workbench (UI)

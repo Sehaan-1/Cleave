@@ -7,3 +7,4 @@ test-results/
 .vercel/
 *.tsbuildinfo
 .DS_Store
+docs/handoffs/
